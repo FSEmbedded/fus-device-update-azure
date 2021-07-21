@@ -309,7 +309,7 @@ ADUC_Result FSUpdateHandlerImpl::IsInstalled(const std::string& installedCriteri
 
     if(_fileType == _firmwareFile)
     {
-        version = ReadValueFromFile(ADUC_VERSION_FILE);
+        version = ReadValueFromFile(FIRMWARE_VERSION_FILE);
     }
     else if(_fileType == _applicationFile)
     {
@@ -323,7 +323,7 @@ ADUC_Result FSUpdateHandlerImpl::IsInstalled(const std::string& installedCriteri
 
     if (version.empty())
     {
-        Log_Error("Version file %s did not contain a version or could not be read.", ADUC_VERSION_FILE);
+        Log_Error("Version file %s did not contain a version or could not be read.", FIRMWARE_VERSION_FILE);
         return ADUC_Result{ ADUC_IsInstalledResult_Failure };
     }
 
