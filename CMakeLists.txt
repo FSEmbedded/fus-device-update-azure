@@ -120,6 +120,10 @@ set (
         STRING
         "Path to the folder containing data file(s) for the ADU Agent. e.g. installedcriteria file."
 )
+set (
+    ADUC_CONTENT_HANDLERS
+    "fus/fsupdate"
+    CACHE STRING "The list of content handlers.")
 
 #
 # DeviceInfo configuration

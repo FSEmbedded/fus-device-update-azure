@@ -10,28 +10,13 @@
 #include <functional>
 #include <stdio.h>
 
-#if ADUC_SWUPDATE_HANDLER
-
+#if ADUC_FSUPDATE_HANDLER
 #    if !ADUC_SIMULATOR_MODE
-#        include "aduc/swupdate_handler.hpp"
-#    else
-#        include "aduc/swupdate_simulator_handler.hpp"
+#        include "aduc/fsupdate_handler.hpp"
 #    endif
-
-#endif
-
-#if ADUC_APT_HANDLER
-
-#    if !ADUC_SIMULATOR_MODE
-#        include "aduc/apt_handler.hpp"
-#    else
-#        include "aduc/apt_simulator_handler.hpp"
-#    endif
-
 #endif
 
 typedef std::function<std::unique_ptr<ContentHandler>(const ContentHandlerCreateData&)> CreateFuncType;
-
 typedef struct tagTypeFuncMap
 {
     const char* UpdateType;
@@ -58,6 +43,9 @@ const TypeFuncMap handlerCreateFuncs[] = {
 #endif
 #if ADUC_SWUPDATE_HANDLER
     FUNCMAPENTRY(microsoft, swupdate),
+#endif
+#if ADUC_FSUPDATE_HANDLER
+    FUNCMAPENTRY(fus, fsupdate),
 #endif
 };
 

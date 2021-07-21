@@ -33,6 +33,22 @@ public:
     {
     }
 
+    /**
+     * Ctor for FS-Update
+     * Extra parameter fileType to choose betwenn ff & af during Install pahase
+    */
+    ContentHandlerCreateData(
+        const std::string& workFolder,
+        const std::string& logFolder,
+        const std::string& filename,
+        const std::string& fileHash,
+        const std::string& fileType
+        ) :
+        _workFolder(workFolder),
+        _logFolder(logFolder), _filename(filename), _fileHash(fileHash), _fileType(fileType)
+    {
+    }
+
     const std::string& WorkFolder() const
     {
         return _workFolder;
@@ -49,10 +65,15 @@ public:
     {
         return _fileHash;
     }
+    const std::string& FileType() const
+    {
+        return _fileType;
+    }
 
 private:
     std::string _workFolder;
     std::string _logFolder;
+    std::string _fileType;
 
     // TODO(Nox): For now we only support one file.
     // eventually we will want to support a list of files
