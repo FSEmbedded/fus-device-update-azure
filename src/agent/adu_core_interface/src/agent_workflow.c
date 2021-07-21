@@ -668,6 +668,28 @@ void ADUC_Workflow_HandleUpdateAction(ADUC_WorkflowData* workflowData)
     //
     // Not a cancel action.
     //
+
+    /**
+     * This checkes the Installed version bevor an action is taken.
+     * This prevents that the same Update is installed twice.
+     * This chek is only done when trying to Download because thats the first
+     * step in the deployment process and there is no way to install it without
+     */
+    if (desiredAction == ADUCITF_UpdateAction_Download)
+    {
+        ADUC_Result isInstalledResult = ADUC_MethodCall_IsInstalled(workflowData);
+        if (isInstalledResult.ResultCode == ADUC_IsInstalledResult_Installed)
+        {
+            Log_Info(
+                "IsInstalled call was true - setting installedUpdateId to %s:%s:%s and setting state to Idle",
+                workflowData->ContentData->ExpectedUpdateId->Provider,
+                workflowData->ContentData->ExpectedUpdateId->Name,
+                workflowData->ContentData->ExpectedUpdateId->Version);
+            ADUC_SetInstalledUpdateIdAndGoToIdle(workflowData, workflowData->ContentData->ExpectedUpdateId);
+            goto done;
+        }
+    }
+
     const ADUC_WorkflowHandlerMapEntry* entry = GetWorkflowHandlerMapEntryForAction(desiredAction);
     if (entry == NULL)
     {
@@ -754,6 +776,7 @@ void ADUC_Workflow_HandleUpdateAction(ADUC_WorkflowData* workflowData)
         // result = ADUC_MethodCall_Prepare(workflowData);
         // shouldCallOperationFunc = IsAducResultCodeSuccess(result.ResultCode);
     }
+
     if (shouldCallOperationFunc)
     {
         result = entry->OperationFunc(methodCallData);
