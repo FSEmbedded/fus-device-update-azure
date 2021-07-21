@@ -263,6 +263,37 @@ std::string FSUpdateHandlerImpl::ReadValueFromFile(const std::string& filePath)
     return result;
 }
 
+ADUC_Result FSUpdateHandlerImpl::UpdateVersionFile(const std::string& newVersion)
+{
+    std::ofstream ofs;
+
+    if(_fileType == _firmwareFile)
+    {
+        Log_Info("Updating fw_version file from '%s' to '%s'",FSUpdateHandlerImpl::ReadValueFromFile(FIRMWARE_VERSION_FILE).c_str(),newVersion.c_str());
+        ofs.open(FIRMWARE_VERSION_FILE, std::ofstream::trunc);
+    }
+    else if(_fileType == _applicationFile)
+    {
+        Log_Info("Updating app-version file from '%s' to '%s'",FSUpdateHandlerImpl::ReadValueFromFile(APP_VERSION_FILE).c_str(),newVersion.c_str());
+        ofs.open(APP_VERSION_FILE, std::ofstream::trunc);
+    }
+    else
+    {
+        Log_Error("Faield to read Version file. Invaliede filetype '%s'",_fileType.c_str());
+        return ADUC_Result{ ADUC_UpdateVersionFileResult_Failure };
+    }
+
+    if(!ofs.is_open())
+    {
+        Log_Error("File failed to open version-file, error: %d", errno);
+    }
+
+    ofs << newVersion;
+    ofs.close();
+
+    return ADUC_Result{ ADUC_UpdateVersionFileResult_Updated };
+}
+
 /**
  * @brief Checks if the installed content matches the installed criteria.
  *

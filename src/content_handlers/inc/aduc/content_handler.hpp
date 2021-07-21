@@ -33,6 +33,7 @@ public:
     virtual ADUC_Result Apply() = 0;
     virtual ADUC_Result Cancel() = 0;
     virtual ADUC_Result IsInstalled(const std::string& installedCriteria) = 0;
+    virtual ADUC_Result UpdateVersionFile(const std::string& installedCriteria) = 0;
 
 protected:
     ContentHandler() = default;

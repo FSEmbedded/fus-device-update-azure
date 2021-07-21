@@ -51,6 +51,7 @@ ADUC_Result LinuxPlatformLayer::SetRegisterData(ADUC_RegisterData* data)
     data->CancelCallback = CancelCallback;
 
     data->IsInstalledCallback = IsInstalledCallback;
+    data->UpdateVersionFileCallback = UpdateVersionFileCallback;
 
     data->SandboxCreateCallback = SandboxCreateCallback;
     data->SandboxDestroyCallback = SandboxDestroyCallback;
@@ -395,6 +396,46 @@ LinuxPlatformLayer::IsInstalled(const char* workflowId, const char* updateType, 
     }
 
     return _contentHandler->IsInstalled(installedCriteria);
+}
+
+/**
+ * @brief Class implementation of the UpdateVersionFile callback.
+ * Calls into the content handler to update the version file.
+ *
+ * @param workflowId The workflow ID.
+ * @param installedCriteria The installed criteria for the content.
+ * @return ADUC_Result The result of the UpdateVersionFile call.
+ */
+ADUC_Result
+LinuxPlatformLayer::UpdateVersionFile(const char* workflowId, const char* updateType, const char* installedCriteria)
+{
+    Log_Info("UpdateVersionFile called workflowId: %s, installed criteria: %s", workflowId, installedCriteria);
+
+    // If we don't currently have a content handler, create one that will get replaced once
+    // we are in a deployment.
+    if (!_contentHandler)
+    {
+        try
+        {
+            _contentHandler = ContentHandlerFactory::Create(updateType, ContentHandlerCreateData{});
+        }
+        catch (const ADUC::Exception& e)
+        {
+            Log_Error(
+                "Failed to create content handler, updateType:%s code: %d, message: %s",
+                updateType,
+                e.Code(),
+                e.Message().c_str());
+            return ADUC_Result{ ADUC_UpdateVersionFileResult_Failure, ADUC_ERC_NOTRECOVERABLE };
+        }
+        catch (...)
+        {
+            Log_Error("Failed to create content handler, updateType:%s", updateType);
+            return ADUC_Result{ ADUC_UpdateVersionFileResult_Failure, ADUC_ERC_NOTRECOVERABLE };
+        }
+    }
+
+    return _contentHandler->UpdateVersionFile(installedCriteria);
 }
 
 ADUC_Result LinuxPlatformLayer::SandboxCreate(const char* workflowId, char** workFolder)
