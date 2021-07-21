@@ -1,7 +1,7 @@
 /**
  * @file client_handle.h
  * @brief Declares the ClientHandle type
- *  
+ *
  * @copyright Copyright (c) 2019, Microsoft Corp.
  */
 

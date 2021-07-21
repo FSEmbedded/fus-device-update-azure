@@ -20,7 +20,7 @@ _Bool GetConnectionInfoFromIdentityService(ADUC_ConnectionInfo* info);
 
 /**
  * @brief Checks whether we can obtain a device or module connection string.
- * 
+ *
  * @return true if connection string can be obtained.
  */
 _Bool IsConnectionInfoValid(const ADUC_LaunchArguments* launchArgs)
@@ -46,7 +46,7 @@ _Bool IsConnectionInfoValid(const ADUC_LaunchArguments* launchArgs)
 
 /**
  * @brief Helper function for simulating an unhealthy state.
- * 
+ *
  * @return true if an ADU configuration file contains simulate_unhealthy_state value (any value).
  */
 _Bool IsSimulatingUnhealthyState()
@@ -62,11 +62,11 @@ _Bool IsSimulatingUnhealthyState()
 
 /**
  * @brief Performs necessary checks to determine whether ADU Agent can function properly.
- * 
+ *
  * Currently, we are performing the following:
  *     - Implicitly check that agent process launched successfully.
  *     - Check that we can obtain the connection info.
- * 
+ *
  * @return true if all checks passed.
  */
 _Bool HealthCheck(const ADUC_LaunchArguments* launchArgs)

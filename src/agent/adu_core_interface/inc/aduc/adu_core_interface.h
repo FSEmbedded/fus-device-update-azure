@@ -48,7 +48,7 @@ void AzureDeviceUpdateCoreInterface_Connected(void* componentContext);
  * @brief Called regularly after the device connected to the IoT Hub.
  *
  * This allows an interface implementation to do work in a cooperative multitasking environment.
- * 
+ *
  * @param componentContext Context object from Create.
  */
 void AzureDeviceUpdateCoreInterface_DoWork(void* componentContext);

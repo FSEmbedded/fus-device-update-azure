@@ -41,7 +41,7 @@ typedef enum tagEISService
 
 /**
  * @brief Returns the string that matches the @p eisErr value
- * @param eisErr error for which 
+ * @param eisErr error for which
  * @returns the string name of the EISErr or "<Unknown>"
  */
 const char* EISErr_ErrToString(EISErr eisErr);
@@ -54,7 +54,7 @@ const char* EISErr_ErrToString(EISErr eisErr);
 const char* EISService_ServiceToString(EISService eisService);
 
 /**
- * @brief Return value for any EIS Utility 
+ * @brief Return value for any EIS Utility
  */
 typedef struct tagEISUtilityResult
 {

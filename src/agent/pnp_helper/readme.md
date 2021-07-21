@@ -1,10 +1,10 @@
-# Common utilities for IoT PnP C SDK 
+# Common utilities for IoT PnP C SDK
 
 This directory contains helper code that your application should be able to take with little or no modification to accelerate implementing a PnP device application.
 
 For reference the files are:
 
-* `pnp_device_client` header and .c file implement a function to help create a `IOTHUB_DEVICE_CLIENT_HANDLE`.  The `IOTHUB_DEVICE_CLIENT_HANDLE` is an existing IoTHub Device SDK that can be used for device <=> IoTHub communication.  
+* `pnp_device_client` header and .c file implement a function to help create a `IOTHUB_DEVICE_CLIENT_HANDLE`.  The `IOTHUB_DEVICE_CLIENT_HANDLE` is an existing IoTHub Device SDK that can be used for device <=> IoTHub communication.
 
     Creating a `IOTHUB_DEVICE_CLIENT_HANDLE` that works with PnP requires a few additional steps, most importantly defining the device's PnP ModelId, which this code does.
 

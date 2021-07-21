@@ -12,7 +12,7 @@
 
 /**
  * @brief Performs necessary checks to determine whether ADU Agent can function properly.
- * 
+ *
  * @return true if all checks passed.
  */
 _Bool HealthCheck();

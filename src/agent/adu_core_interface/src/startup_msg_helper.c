@@ -194,7 +194,7 @@ done:
 }
 
 /**
- * @brief Adds the deviceProperties to the @p startupObj 
+ * @brief Adds the deviceProperties to the @p startupObj
  * @param startupObj the JSON Object which will have the device properties added to it
  * @returns true on successful addition, false on failure
  */

@@ -98,7 +98,7 @@ done:
 
 /**
  * @brief Reports values to the cloud which do not change throughout ADUs execution
- * @details the current expectation is to report these values after the successful 
+ * @details the current expectation is to report these values after the successful
  * connection of the AzureDeviceUpdateCoreInterface
  * @returns true when the report is sent and false when reporting fails.
  */

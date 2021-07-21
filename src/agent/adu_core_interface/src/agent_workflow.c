@@ -435,7 +435,7 @@ void ADUC_Workflow_HandleStartupWorkflowData(ADUC_WorkflowData* workflowData)
     //
     // The following logic handles the case where the device (or adu-agent) restarted.
     //
-    // If IsInstalled returns true, we will assume that the update was succeeded.
+    // If IsInstalled returns true, we will assume that the update has succeeded.
     //
     // In this case, we will update the 'InstalledContentId' to match 'ExpectedContentId'
     // and transition to Idle state.
