@@ -1,13 +1,3 @@
-set (
-    ADUC_DEVICEINFO_MANUFACTURER
-    "Contoso"
-    CACHE STRING "Manufacturer of the device.")
-
-set (
-    ADUC_DEVICEINFO_MODEL
-    "Virtual Machine"
-    CACHE STRING "Name of the device.")
-
 cmake_minimum_required (VERSION 3.5)
 
 project (azure_device_update_client)
@@ -104,6 +94,10 @@ set (
     "/etc/adu"
     CACHE STRING "Path to the configuration folder for the ADU Agent.")
 
+set (
+    ADUC_CONF_FILE
+    "adu-conf.txt"
+    CACHE STRING "Name of the ADU Agent configuration file.")
 
 set (
     ADUC_DATA_FOLDER
@@ -122,6 +116,15 @@ set (
 # These values must be modified to describe your device.
 #
 
+set (
+    ADUC_DEVICEINFO_MANUFACTURER
+    "fus"
+    CACHE STRING "Manufacturer of the device.")
+
+set (
+    ADUC_DEVICEINFO_MODEL
+    "IMX8MM"
+    CACHE STRING "Name of the device.")
 
 #
 # AzureDeviceUpdateInterface DeviceProperties configuration
@@ -147,6 +150,10 @@ set (
     "/var/log/adu"
     CACHE STRING "Location where ADU Agent will write logs.")
 
+set (
+    ADUC_PLATFORM_LAYER
+    "simulator"
+    CACHE STRING "The platform layer to use. Options: simulator linux")
 
 set (
     FIRMWARE_VERSION_FILE
