@@ -478,6 +478,22 @@ void ADUC_Workflow_HandleStartupWorkflowData(ADUC_WorkflowData* workflowData)
             ADUC_Workflow_HandleUpdateAction(workflowData);
             goto done;
         }
+
+        if (desiredAction == ADUCITF_UpdateAction_Install)
+        {
+            Log_Info("There's a pending 'install' action request.");
+
+            /**
+             * For now we do not process this action on startup.
+             * So we simply send a fail state and go back to idel
+            */
+
+            GenerateUniqueId(workflowData->WorkflowId, ARRAY_SIZE(workflowData->WorkflowId));
+            ADUC_Result result = { .ResultCode = ADUC_InstallResult_Failure,
+                               .ExtendedResultCode = ADUC_ERC_LOWERLEVEL_INVALID_UPDATE_ACTION };
+            ADUC_SetUpdateStateWithResult(workflowData, ADUCITF_State_Failed,result);
+        }
+
         if (desiredAction == ADUCITF_UpdateAction_Apply)
         {
             Log_Info("There's a pending-- 'Apply' action request.");
