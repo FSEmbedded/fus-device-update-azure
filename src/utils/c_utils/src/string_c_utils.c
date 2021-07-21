@@ -279,12 +279,13 @@ _Bool atoui(const char* str, unsigned int* ui)
  * @param[out] updateTypeName - Caller must call free()
  * @param[out] updateTypeVersion
  */
-_Bool ADUC_ParseUpdateType(const char* updateType, char** updateTypeName, unsigned int* updateTypeVersion)
+_Bool ADUC_ParseUpdateType(const char* updateType, char** updateTypeName, char** updateTypeVersion)
 {
     _Bool succeeded = false;
     char* name = NULL;
+    char* type = NULL;
     *updateTypeName = NULL;
-    *updateTypeVersion = 0;
+    *updateTypeVersion = NULL;
 
     if (updateType == NULL)
     {
@@ -300,9 +301,16 @@ _Bool ADUC_ParseUpdateType(const char* updateType, char** updateTypeName, unsign
     }
 
     const size_t nameLength = delimiter - updateType;
+    const size_t typeLength = strlen(delimiter);
 
     //name is empty
     if (nameLength == 0)
+    {
+        goto done;
+    }
+
+    //type is empty
+    if (typeLength == 0)
     {
         goto done;
     }
@@ -313,15 +321,18 @@ _Bool ADUC_ParseUpdateType(const char* updateType, char** updateTypeName, unsign
         goto done;
     }
 
+    type = malloc(typeLength); // \0 has space because type length includes ":" which will be skipped
+    if (type == NULL)
+    {
+        goto done;
+    }
+
     memcpy(name, updateType, nameLength);
     name[nameLength] = '\0';
 
-    // convert version string to unsigned int
-    if (!atoui(delimiter + 1, updateTypeVersion))
-    {
-        // conversion failed
-        goto done;
-    }
+    delimiter++; //skippes the :
+    memcpy(type, delimiter, typeLength);
+    type[typeLength] = '\0';
 
     succeeded = true;
 
@@ -329,6 +340,7 @@ done:
     if (succeeded)
     {
         *updateTypeName = name;
+        *updateTypeVersion = type;
     }
     else
     {

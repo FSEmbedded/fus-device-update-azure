@@ -17,7 +17,7 @@ EXTERN_C_BEGIN
 
 char* ADUC_StringUtils_Trim(char* str);
 
-_Bool ADUC_ParseUpdateType(const char* updateType, char** updateTypeName, unsigned int* updateTypeVersion);
+_Bool ADUC_ParseUpdateType(const char* updateType, char** updateTypeName, char** updateTypeVersion);
 
 _Bool ReadDelimitedValueFromFile(const char* fileName, const char* key, char* value, unsigned int valueLen);
 

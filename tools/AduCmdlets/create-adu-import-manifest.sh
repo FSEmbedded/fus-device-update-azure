@@ -140,12 +140,6 @@ while getopts "c:f:hi:n:p:t:v:" OPT; do
         fi
 
         UPDATE_TYPE=$OPTARG
-
-        # POSIX regex only, sigh.
-        if ! [[ "$UPDATE_TYPE" =~ ^[^[:space:]]+/[^[:space:]]+:[[:digit:]]{1,5}$ ]]; then
-            write_error "Invalid update type specified."
-            exit 1
-        fi
         ;;
 
     v)

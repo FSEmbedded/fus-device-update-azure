@@ -99,7 +99,7 @@ typedef struct tagADUC_PrepareInfo
 {
     char* updateType; /**< Handler UpdateType. */
     char* updateTypeName; /**< Provider/Name in the UpdateType string. */
-    unsigned int updateTypeVersion; /**< Version number in the UpdateType string. */
+    char* updateTypeVersion; /**< Version number in the UpdateType string. */
     unsigned int fileCount; /**< Number of files in #Files list. */
     ADUC_FileEntity* files; /**< Array of #ADUC_FileEntity objects describing what to download. */
 } ADUC_PrepareInfo;

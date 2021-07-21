@@ -9,6 +9,7 @@
 #include <aduc/hash_utils.h>
 #include <aduc/string_utils.hpp>
 #include <aduc/system_utils.h>
+#include <aduc/string_c_utils.h>
 
 #include <cstring>
 #include <sys/stat.h>
@@ -85,7 +86,7 @@ void LinuxPlatformLayer::Idle(const char* workflowId)
 ADUC_Result LinuxPlatformLayer::Prepare(const char* workflowId, const ADUC_PrepareInfo* prepareInfo)
 {
     Log_Info(
-        "{%s} Received Metadata, UpdateType: %s, UpdateTypeName: %s, UpdateTypeVersion: %u, FileCount: %u",
+        "{%s} Received Metadata, UpdateType: %s, UpdateTypeName: %s, UpdateTypeVersion: %s, FileCount: %u",
         workflowId,
         prepareInfo->updateType,
         prepareInfo->updateTypeName,
@@ -106,7 +107,7 @@ ADUC_Result LinuxPlatformLayer::Prepare(const char* workflowId, const ADUC_Prepa
     if (result.ResultCode == ADUC_PrepareResult_Failure)
     {
         Log_Error(
-            "Metadata validation failed, Version %u, File Count %u",
+            "Metadata validation failed, Version '%s', File Count %u",
             prepareInfo->updateTypeVersion,
             prepareInfo->fileCount);
     }
@@ -265,8 +266,12 @@ ADUC_Result LinuxPlatformLayer::Download(const char* workflowId, const char* upd
     {
         // We create the content handler as part of the Download phase since this is the start of the rollout workflow
         // and we need to call into the content handler for any additional downloads it may need.
+        char *typeName[12]; // fus/fsupdate
+        char *typeVersion[11]; // application or firmware
+        ADUC_ParseUpdateType(updateType,typeName,typeVersion);
+
         _contentHandler = ContentHandlerFactory::Create(
-            updateType, { info->WorkFolder, ADUC_LOG_FOLDER, entity.TargetFilename, entity.FileId });
+            updateType, { info->WorkFolder, ADUC_LOG_FOLDER, entity.TargetFilename, entity.FileId , *typeVersion});
 
         const ADUC_Result contentHandlerResult{ _contentHandler->Download() };
         resultCode = contentHandlerResult.ResultCode;
@@ -377,7 +382,13 @@ LinuxPlatformLayer::IsInstalled(const char* workflowId, const char* updateType, 
     {
         try
         {
-            _contentHandler = ContentHandlerFactory::Create(updateType, ContentHandlerCreateData{});
+            char *typeName[12]; // fus/fsupdate
+            char *typeVersion[11]; // application or firmware
+            ADUC_ParseUpdateType(updateType,typeName,typeVersion);
+
+             _contentHandler = ContentHandlerFactory::Create(updateType, {*typeVersion});
+
+            // _contentHandler = ContentHandlerFactory::Create(updateType, ContentHandlerCreateData{});
         }
         catch (const ADUC::Exception& e)
         {
