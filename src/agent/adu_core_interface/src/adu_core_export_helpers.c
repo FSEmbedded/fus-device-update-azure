@@ -767,7 +767,7 @@ void ADUC_MethodCall_Idle(ADUC_WorkflowData* workflowData)
 
     else
     {
-        Log_Info("UpdateAction: Idle. WorkflowId is not generated yet.");
+        Log_Info("UpdateAction: Idle. WorkFolder not set. -> SandboxDestroy was not called");
     }
 
     // Can reach Idle state from ApplyStarted as there isn't an ApplySucceeded state.
@@ -1095,6 +1095,8 @@ void ADUC_MethodCall_Apply_Complete(ADUC_MethodCall_Data* methodCallData, ADUC_R
     }
     else if (result.ResultCode == ADUC_ApplyResult_Success)
     {
+        //After successfull Apply Action we have to modify the fw_version
+        ADUC_MethodCall_UpdateVersionFile(methodCallData->WorkflowData);
         // An Apply action completed successfully. Continue to the next step.
         methodCallData->WorkflowData->OperationInProgress = false;
     }

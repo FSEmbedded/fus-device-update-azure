@@ -478,6 +478,27 @@ void ADUC_Workflow_HandleStartupWorkflowData(ADUC_WorkflowData* workflowData)
             ADUC_Workflow_HandleUpdateAction(workflowData);
             goto done;
         }
+        if (desiredAction == ADUCITF_UpdateAction_Apply)
+        {
+            Log_Info("There's a pending-- 'Apply' action request.");
+
+            /**
+             * Generate workflowId when we start a workflow.
+             * This is normaly done during the download action.
+             * Because we are starting with apply we have to generate one here.
+            */
+
+            workflowData->LastReportedState = ADUCITF_State_InstallSucceeded;
+            // workflowData->CurrentAction = ADUCITF_State_ApplyStarted;
+
+            // There's a pending Apply request.
+            // We need to make sure we don't change our state to 'idle'.
+            workflowData->StartupIdleCallSent = true;
+
+            ADUC_Workflow_HandleUpdateAction(workflowData);
+            ADUC_SetInstalledUpdateIdAndGoToIdle(workflowData, workflowData->ContentData->ExpectedUpdateId);
+            goto done;
+        }
     }
 
     ADUC_SetUpdateStateWithResult(workflowData, ADUCITF_State_Idle, result);
@@ -706,6 +727,17 @@ void ADUC_Workflow_HandleUpdateAction(ADUC_WorkflowData* workflowData)
         shouldCallOperationFunc = IsAducResultCodeSuccess(result.ResultCode);
     }
 
+    else if (entry->Action == ADUCITF_UpdateAction_Apply )
+    {
+        // Generate workflowId when we start applying.
+        GenerateUniqueId(workflowData->WorkflowId, ARRAY_SIZE(workflowData->WorkflowId));
+        Log_Info("Start the workflow - Apply, with WorkflowId %s", workflowData->WorkflowId);
+
+        shouldCallOperationFunc = true;
+        // No need to prepare anything ?
+        // result = ADUC_MethodCall_Prepare(workflowData);
+        // shouldCallOperationFunc = IsAducResultCodeSuccess(result.ResultCode);
+    }
     if (shouldCallOperationFunc)
     {
         result = entry->OperationFunc(methodCallData);
@@ -881,7 +913,7 @@ _Bool IsDuplicateRequest(ADUCITF_UpdateAction action, ADUCITF_State lastReported
         break;
     case ADUCITF_UpdateAction_Apply:
         isDuplicateRequest =
-            (lastReportedState == ADUCITF_State_ApplyStarted || lastReportedState == ADUCITF_State_Idle);
+            (lastReportedState == ADUCITF_State_ApplyStarted);
         break;
     case ADUCITF_UpdateAction_Cancel:
         // Cancel is considered a duplicate action when in the Idle state.
