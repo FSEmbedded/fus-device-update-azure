@@ -43,10 +43,30 @@ int ADUC_LaunchChildProcess(const std::string& command, std::vector<std::string>
 
     int filedes[2];
     const int ret = pipe(filedes);
+
     if (ret != 0)
     {
         Log_Error("Cannot create output and error pipes. %s (errno %d).", strerror(errno), errno);
         return ret;
+    }
+
+    if (command == "/usr/bin/FS-Update")
+    {
+        Log_Info("Starting FS-Updater");
+
+        for (int i = 0; i < args.size(); i++)
+        {
+            Log_Info("Arg %d = %s", i, args[i].c_str());
+        }
+    }
+    else
+    {
+        Log_Info("Starting Child Process");
+
+        for (int i = 0; i < args.size(); i++)
+        {
+            Log_Info("Arg %d = %s", i, args[i].c_str());
+        }
     }
 
     const int pid = fork();
@@ -54,21 +74,30 @@ int ADUC_LaunchChildProcess(const std::string& command, std::vector<std::string>
     if (pid == 0)
     {
         // Running inside child process.
+        /**
+            * Run child process as 'root'.
+            * fw_setenv and fw_printenv are only accessible to root
+            * This is done in the cild process so we don't mess up the
+            * permissions for logging,conf and do-agent
+        */
+        int defaultUserId = getuid();
+        int effectiveUserId = geteuid();
 
-        // Redirect stdout and stderr to WRITE_END
-        dup2(filedes[WRITE_END], STDOUT_FILENO);
-        dup2(filedes[WRITE_END], STDERR_FILENO);
-
-        close(filedes[READ_END]);
-        close(filedes[WRITE_END]);
+        if (setuid(effectiveUserId) != 0)
+        {
+            Log_Error("setuid failed: uid(%d), defaultUid(%d), effectiveUid(%d)", getuid(), defaultUserId, effectiveUserId);
+            return 7;
+        }
 
         std::vector<char*> argv;
         argv.reserve(args.size() + 2);
         argv.emplace_back(const_cast<char*>(command.c_str()));
+
         for (const std::string& arg : args)
         {
             argv.emplace_back(const_cast<char*>(arg.c_str()));
         }
+
         argv.emplace_back(nullptr);
 
         // The exec() functions only return if an error has occurred.
@@ -114,6 +143,7 @@ int ADUC_LaunchChildProcess(const std::string& command, std::vector<std::string>
         // Child process terminated normally.
         // e.g. by calling exit() or _exit(), or by returning from main().
         childExitStatus = WEXITSTATUS(wstatus);
+        Log_Info("Child process terminated normally, signal %d", childExitStatus);
     }
     else if (WIFSIGNALED(wstatus))
     {
