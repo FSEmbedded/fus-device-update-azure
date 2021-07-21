@@ -1,3 +1,21 @@
+set (
+    ADUC_DEVICEINFO_MANUFACTURER
+    "Contoso"
+    CACHE STRING "Manufacturer of the device.")
+
+set (
+    ADUC_DEVICEINFO_MODEL
+    "Virtual Machine"
+    CACHE STRING "Name of the device.")
+
+set (
+    ADUC_VERSION_FILE
+    "/etc/adu-version"
+    CACHE STRING "Path to the file that contains version info for the image or device.")
+set (
+    ADUC_VERSION_FILE
+    "/etc/adu-version"
+    CACHE STRING "Path to the file that contains version info for the image or device.")
 cmake_minimum_required (VERSION 3.5)
 
 project (azure_device_update_client)
@@ -94,10 +112,6 @@ set (
     "/etc/adu"
     CACHE STRING "Path to the configuration folder for the ADU Agent.")
 
-set (
-    ADUC_CONF_FILE
-    "adu-conf.txt"
-    CACHE STRING "Name of the ADU Agent configuration file.")
 
 set (
     ADUC_DATA_FOLDER
@@ -106,25 +120,12 @@ set (
         STRING
         "Path to the folder containing data file(s) for the ADU Agent. e.g. installedcriteria file."
 )
-set (
-    ADUC_CONTENT_HANDLERS
-    "microsoft/swupdate"
-    CACHE STRING "The list of content handlers.")
 
 #
 # DeviceInfo configuration
 # These values must be modified to describe your device.
 #
 
-set (
-    ADUC_DEVICEINFO_MANUFACTURER
-    "Contoso"
-    CACHE STRING "Manufacturer of the device.")
-
-set (
-    ADUC_DEVICEINFO_MODEL
-    "Virtual Machine"
-    CACHE STRING "Name of the device.")
 
 #
 # AzureDeviceUpdateInterface DeviceProperties configuration
@@ -150,15 +151,7 @@ set (
     "/var/log/adu"
     CACHE STRING "Location where ADU Agent will write logs.")
 
-set (
-    ADUC_PLATFORM_LAYER
-    "simulator"
-    CACHE STRING "The platform layer to use. Options: simulator linux")
 
-set (
-    ADUC_VERSION_FILE
-    "/etc/adu-version"
-    CACHE STRING "Path to the file that contains version info for the image or device.")
 
 # By default ADU Agent daemon runs as root.
 # root user home directory should be /root.
@@ -182,10 +175,7 @@ set (
     "/var/log/adu"
     CACHE STRING "Location where ADU Agent will write logs.")
 
-set (
-    ADUC_VERSION_FILE
-    "/etc/adu-version"
-    CACHE STRING "Path to the file that contains version info for the image or device.")
+
 
 option (ADUC_WARNINGS_AS_ERRORS "Treat warnings as errors (-Werror)" ON)
 option (ADUC_BUILD_UNIT_TESTS "Build unit tests and mock some functionality" OFF)
