@@ -14,7 +14,7 @@
 #include <string>
 #include <unistd.h> // sync()
 #include <vector>
-
+#include <sys/reboot.h> // reboot()
 EXTERN_C_BEGIN
 
 /**
@@ -62,7 +62,7 @@ void ADUC_Unregister(ADUC_Token token)
 
 /**
  * @brief Reboot the system.
- * 
+ *
  * @returns int errno, 0 if success.
  */
 int ADUC_RebootSystem()
@@ -73,8 +73,9 @@ int ADUC_RebootSystem()
     sync();
 
     std::string output;
-    std::vector<std::string> args{ "--update-type", "common", "--update-action", "reboot" };
-    const int exitStatus = ADUC_LaunchChildProcess("/usr/lib/adu/adu-shell", args, output);
+    std::vector<std::string> args{ "--reboot", "--no-wall" };
+
+    int exitStatus = ADUC_LaunchChildProcess("/sbin/reboot", args, output);
 
     if (exitStatus != 0)
     {
@@ -91,7 +92,7 @@ int ADUC_RebootSystem()
 
 /**
  * @brief Restart the ADU Agent.
- * 
+ *
  * @returns int errno, 0 if success.
  */
 int ADUC_RestartAgent()
