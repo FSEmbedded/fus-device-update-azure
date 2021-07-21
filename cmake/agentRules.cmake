@@ -10,7 +10,7 @@ macro (compileAsC99)
         endif ()
     else ()
         set (CMAKE_C_STANDARD 99)
-        set (CMAKE_CXX_STANDARD 11)
+        set (CMAKE_CXX_STANDARD 17)
     endif ()
 endmacro (compileAsC99)
 
