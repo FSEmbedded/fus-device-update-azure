@@ -649,7 +649,7 @@ static _Bool ADUC_RegisterData_VerifyData(const ADUC_RegisterData* registerData)
         || registerData->InstallCallback == NULL || registerData->ApplyCallback == NULL
         || registerData->SandboxCreateCallback == NULL || registerData->SandboxDestroyCallback == NULL
         || registerData->PrepareCallback == NULL || registerData->DoWorkCallback == NULL
-        || registerData->IsInstalledCallback == NULL || registerData->UpdateVersionFileCallback == NULL)
+        || registerData->IsInstalledCallback == NULL || registerData->GetUpdateRebootStateCallback == NULL)
     {
         Log_Error("Invalid ADUC_RegisterData object");
         return false;
@@ -1150,24 +1150,24 @@ ADUC_Result ADUC_MethodCall_IsInstalled(const ADUC_WorkflowData* workflowData)
 }
 
 /**
- * @brief Helper to call into the platform layer for UpdateVersionFile.
+ * @brief Helper to call into the platform layer for GetUpdateRebootState.
  *
  * @param[in] workflowData The workflow data.
  *
- * @return ADUC_Result The result of the UpdateVersionFile call.
+ * @return ADUC_Result The result of the GetUpdateRebootState call.
  */
-ADUC_Result ADUC_MethodCall_UpdateVersionFile(const ADUC_WorkflowData* workflowData)
+ADUC_Result ADUC_MethodCall_GetUpdateRebootState(const ADUC_WorkflowData* workflowData)
 {
     if (workflowData->ContentData == NULL)
     {
-        Log_Info("UpdateVersionFile called before installedCriteria has been initialized.");
-        ADUC_Result result = { .ResultCode = ADUC_UpdateVersionFileResult_Failure };
+        Log_Info("GetUpdateRebootState called before installedCriteria has been initialized.");
+        ADUC_Result result = { .ResultCode = ADUC_GetUpdateRebootStateResult_FAILURE };
         return result;
     }
 
     const ADUC_RegisterData* registerData = &(workflowData->RegisterData);
-    Log_Info("Calling UpdateVersionFileCallback.");
-    return registerData->UpdateVersionFileCallback(
+    Log_Info("Calling GetUpdateRebootStateCallback");
+    return registerData->GetUpdateRebootStateCallback(
         registerData->Token,
         workflowData->WorkflowId,
         workflowData->ContentData->UpdateType,

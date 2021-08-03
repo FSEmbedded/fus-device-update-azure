@@ -162,7 +162,7 @@ set (
 
 set (
     APP_VERSION_FILE
-    "/etc/app_version"
+    "/rw_fs/root/application/current/etc/app_version"
     CACHE STRING "Path to the file that contains version info for the data partition or app")
 
 # By default ADU Agent daemon runs as root.
@@ -194,7 +194,7 @@ set (
 
 set (
     APP_VERSION_FILE
-    "/etc/app_version"
+    "/rw_fs/root/application/current/etc/app_version"
     CACHE STRING "Path to the file that contains version info for the data partition or app")
 
 option (ADUC_WARNINGS_AS_ERRORS "Treat warnings as errors (-Werror)" ON)

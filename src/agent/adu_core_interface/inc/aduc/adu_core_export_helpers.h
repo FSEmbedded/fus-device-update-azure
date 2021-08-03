@@ -220,8 +220,9 @@ void ADUC_MethodCall_Apply_Complete(ADUC_MethodCall_Data* methodCallData, ADUC_R
 void ADUC_MethodCall_Cancel(const ADUC_WorkflowData* workflowData);
 
 ADUC_Result ADUC_MethodCall_IsInstalled(const ADUC_WorkflowData* workflowData);
-ADUC_Result ADUC_MethodCall_UpdateVersionFile(const ADUC_WorkflowData* workflowData);
 
+
+ADUC_Result ADUC_MethodCall_GetUpdateRebootState(const ADUC_WorkflowData* workflowData);
 //
 // State transition
 //

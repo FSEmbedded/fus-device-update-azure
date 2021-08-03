@@ -56,7 +56,7 @@ ADUC_Result LinuxPlatformLayer::SetRegisterData(ADUC_RegisterData* data)
     data->CancelCallback = CancelCallback;
 
     data->IsInstalledCallback = IsInstalledCallback;
-    data->UpdateVersionFileCallback = UpdateVersionFileCallback;
+    data->GetUpdateRebootStateCallback = GetUpdateRebootStateCallback;
 
     data->SandboxCreateCallback = SandboxCreateCallback;
     data->SandboxDestroyCallback = SandboxDestroyCallback;
@@ -414,17 +414,17 @@ LinuxPlatformLayer::IsInstalled(const char* workflowId, const char* updateType, 
 }
 
 /**
- * @brief Class implementation of the UpdateVersionFile callback.
+ * @brief Class implementation of the GetUpdateRebootState callback.
  * Calls into the content handler to update the version file.
  *
  * @param workflowId The workflow ID.
  * @param installedCriteria The installed criteria for the content.
- * @return ADUC_Result The result of the UpdateVersionFile call.
+ * @return ADUC_Result The result of the GetUpdateRebootState call.
  */
 ADUC_Result
-LinuxPlatformLayer::UpdateVersionFile(const char* workflowId, const char* updateType, const char* installedCriteria)
+LinuxPlatformLayer::GetUpdateRebootState(const char* workflowId, const char* updateType, const char* installedCriteria)
 {
-    Log_Info("UpdateVersionFile called workflowId: %s, installed criteria: %s", workflowId, installedCriteria);
+    Log_Info("GetUpdateRebootState called");
 
     // If we don't currently have a content handler, create one that will get replaced once
     // we are in a deployment.
@@ -441,16 +441,16 @@ LinuxPlatformLayer::UpdateVersionFile(const char* workflowId, const char* update
                 updateType,
                 e.Code(),
                 e.Message().c_str());
-            return ADUC_Result{ ADUC_UpdateVersionFileResult_Failure, ADUC_ERC_NOTRECOVERABLE };
+            return ADUC_Result{ ADUC_GetUpdateRebootStateResult_FAILURE, ADUC_ERC_NOTRECOVERABLE };
         }
         catch (...)
         {
             Log_Error("Failed to create content handler, updateType:%s", updateType);
-            return ADUC_Result{ ADUC_UpdateVersionFileResult_Failure, ADUC_ERC_NOTRECOVERABLE };
+            return ADUC_Result{ ADUC_GetUpdateRebootStateResult_FAILURE, ADUC_ERC_NOTRECOVERABLE };
         }
     }
 
-    return _contentHandler->UpdateVersionFile(installedCriteria);
+    return _contentHandler->GetUpdateRebootState();
 }
 
 ADUC_Result LinuxPlatformLayer::SandboxCreate(const char* workflowId, char** workFolder)

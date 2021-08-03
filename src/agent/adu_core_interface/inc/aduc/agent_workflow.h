@@ -40,6 +40,19 @@ typedef enum tagADUC_SystemRebootState
     ADUC_SystemRebootState_InProgress = 2 /** System reboot is in progress. */
 } ADUC_SystemRebootState;
 
+typedef enum tagADUC_UpdateRebootState
+{
+    ADUC_UpdateRebootState_FAILURE = 7, /**< General failure. */
+
+    ADUC_UpdateRebootState_NO_UPDATE_REBOOT_PENDING = 0,
+    ADUC_UpdateRebootState_FW_UPDATE_REBOOT_FAILED = 1,
+    ADUC_UpdateRebootState_INCOMPLETE_FW_UPDATE = 2,
+    ADUC_UpdateRebootState_INCOMPLETE_APP_UPDATE = 3,
+    ADUC_UpdateRebootState_INCOMPLETE_APP_FW_Update = 4,
+    ADUC_UpdateRebootState_FAILED_FW_UPDATE = 5,
+    ADUC_UpdateRebootState_FAILED_APP_UPDATE = 6,
+} ADUC_UpdateRebootState;
+
 /**
  * @brief Data shared across the agent workflow.
  */
@@ -65,6 +78,8 @@ typedef struct tagADUC_WorkflowData
     ADUC_SystemRebootState SystemRebootState; /**< The system reboot state */
 
     ADUC_AgentRestartState AgentRestartState; /**< The agent restart state */
+
+    ADUC_UpdateRebootState UpdateRebootState; /**< The update reboot state */
 
     _Bool OperationCancelled; /**< Was the operation in progress requested to cancel? */
 

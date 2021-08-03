@@ -267,35 +267,63 @@ std::string FSUpdateHandlerImpl::ReadValueFromFile(const std::string& filePath)
     return result;
 }
 
-ADUC_Result FSUpdateHandlerImpl::UpdateVersionFile(const std::string& newVersion)
+ADUC_Result FSUpdateHandlerImpl::GetUpdateRebootState()
 {
-    std::ofstream ofs;
+    Log_Info("GetUpdateRebootState");
+    _isApply = false;
 
-    if(_fileType == _firmwareFile)
+    ADUC_Result result;
+
+    std::string command = _pathToFsUpdate;
+    std::vector<std::string> args{ _getRebootState };
+    std::string output;
+
+    const int exitCode = ADUC_LaunchChildProcess(command, args, output);
+
+    switch (exitCode)
     {
-        Log_Info("Updating fw_version file from '%s' to '%s'",FSUpdateHandlerImpl::ReadValueFromFile(FIRMWARE_VERSION_FILE).c_str(),newVersion.c_str());
-        ofs.open(FIRMWARE_VERSION_FILE, std::ofstream::trunc);
-    }
-    else if(_fileType == _applicationFile)
-    {
-        Log_Info("Updating app-version file from '%s' to '%s'",FSUpdateHandlerImpl::ReadValueFromFile(APP_VERSION_FILE).c_str(),newVersion.c_str());
-        ofs.open(APP_VERSION_FILE, std::ofstream::trunc);
-    }
-    else
-    {
-        Log_Error("Faield to read Version file. Invaliede filetype '%s'",_fileType.c_str());
-        return ADUC_Result{ ADUC_UpdateVersionFileResult_Failure };
+    case 0:
+        result = { ADUC_GetUpdateRebootStateResult_NO_UPDATE_REBOOT_PENDING };
+        Log_Info("FS-Update returned NO_UPDATE_REBOOT_PENDING");
+        break;
+
+    case 1:
+        result = { ADUC_GetUpdateRebootStateResult_FW_UPDATE_REBOOT_FAILED };
+        Log_Info("FS-Update returned FW_UPDATE_REBOOT_FAILED");
+        break;
+
+    case 2:
+        result = { ADUC_GetUpdateRebootStateResult_INCOMPLETE_FW_UPDATE };
+        Log_Info("FS-Update returned INCOMPLETE_FW_UPDATE");
+        break;
+
+    case 3:
+        result = { ADUC_GetUpdateRebootStateResult_INCOMPLETE_APP_UPDATE };
+        Log_Info("FS-Update returned INCOMPLETE_APP_UPDATE");
+        break;
+
+    case 4:
+        result = { ADUC_GetUpdateRebootStateResult_INCOMPLETE_APP_FW_UPDATE };
+        Log_Info("FS-Update returned INCOMPLETE_APP_AND_UPDATE");
+        break;
+
+    case 5:
+        result = { ADUC_GetUpdateRebootStateResult_FAILED_FW_UPDATE };
+        Log_Info("FS-Update returned FAILED_FW_UPDATE");
+        break;
+
+    case 6:
+        result = { ADUC_GetUpdateRebootStateResult_FAILED_APP_UPDATE };
+        Log_Info("FS-Update returned FAILED_APP_UPDATE");
+        break;
+
+    default:
+        result = { ADUC_GetUpdateRebootStateResult_FAILURE };
+        Log_Info("FS-Update -urs failed");
+        break;
     }
 
-    if(!ofs.is_open())
-    {
-        Log_Error("File failed to open version-file, error: %d", errno);
-    }
-
-    ofs << newVersion;
-    ofs.close();
-
-    return ADUC_Result{ ADUC_UpdateVersionFileResult_Updated };
+    return result;
 }
 
 /**
@@ -320,13 +348,13 @@ ADUC_Result FSUpdateHandlerImpl::IsInstalled(const std::string& installedCriteri
     }
     else
     {
-        Log_Error("Faield to read Version file. Invaliede filetype '%s'",_fileType.c_str());
-        return ADUC_Result{ ADUC_UpdateVersionFileResult_Failure };
+        Log_Error("Faield to read Version file. Invaliede filetype '%s'", _fileType.c_str());
+        return ADUC_Result{ ADUC_IsInstalledResult_Failure };
     }
 
     if (version.empty())
     {
-        Log_Error("Version file %s did not contain a version or could not be read.", FIRMWARE_VERSION_FILE);
+        Log_Error("Version file %s did not contain a version or could not be read.", _fileType.c_str());
         return ADUC_Result{ ADUC_IsInstalledResult_Failure };
     }
 

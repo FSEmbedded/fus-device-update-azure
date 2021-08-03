@@ -295,11 +295,27 @@ typedef enum tagADUC_IsInstalledResult
     ADUC_IsInstalledResult_NotInstalled = 2, /**< Succeeded and content is not installed */
 } ADUC_IsInstalledResult;
 
-typedef enum tagADUC_UpdateVersionFileResult
+/**
+ * @brief Return value for GetUpdateRebootStateResult calls.
+ *
+ * @note The enum differs form the FS-Update because there is no way,
+ * to install a fw and app file at the same time.
+ */
+typedef enum tagADUC_GetUpdateRebootStateResult
 {
-    ADUC_UpdateVersionFileResult_Failure = 0, /**< General failure. */
-    ADUC_UpdateVersionFileResult_Updated = 1, /**< Succeeded and file was Updated. */
-} ADUC_UpdateVersionFileResult;
+
+    ADUC_GetUpdateRebootStateResult_NO_UPDATE_REBOOT_PENDING = 0, /**< Default state */
+    ADUC_GetUpdateRebootStateResult_FW_UPDATE_REBOOT_FAILED = 1, /**< Reboot after a successful install failed */
+    ADUC_GetUpdateRebootStateResult_INCOMPLETE_FW_UPDATE = 2, /**< State after a successful fw installation */
+    ADUC_GetUpdateRebootStateResult_INCOMPLETE_APP_UPDATE = 3, /**< State after a successful app installation */
+    ADUC_GetUpdateRebootStateResult_INCOMPLETE_APP_FW_UPDATE = 4, /**< This can only be triggerd by a manual update */
+    ADUC_GetUpdateRebootStateResult_FAILED_FW_UPDATE = 5, /**< State if a fw install fails*/
+    ADUC_GetUpdateRebootStateResult_FAILED_APP_UPDATE = 6, /**< State if a app install fails**/
+
+    ADUC_GetUpdateRebootStateResult_FAILURE = 7, /**< General failure. */
+
+} ADUC_GetUpdateRebootStateResult;
+
 /**
  * @brief Checks if the given content is installed.
  *
@@ -308,10 +324,15 @@ typedef enum tagADUC_UpdateVersionFileResult
  * @param installedCriteria The installed criteria string.
  * @return ADUC_Result True if the content is installed.
  */
+
 typedef ADUC_Result (*IsInstalledCallbackFunc)(
     ADUC_Token token, const char* workflowId, const char* updateType, const char* installedCriteria);
 
-typedef ADUC_Result (*UpdateVersionFileCallbackFunc)(
+/**
+ * @brief Checks the current system state.
+ * @return ADUC_Result with the current state.
+ */
+typedef ADUC_Result (*GetUpdateRebootStateCallbackFunc)(
     ADUC_Token token, const char* workflowId, const char* updateType, const char* installedCriteria);
 
 //
@@ -391,7 +412,7 @@ typedef struct tagADUC_RegisterData
     CancelCallbackFunc CancelCallback; /**< Cancel message handler. */
 
     IsInstalledCallbackFunc IsInstalledCallback; /**< IsInstalled function pointer */
-    UpdateVersionFileCallbackFunc UpdateVersionFileCallback; /**< UpdateVersionFile function pointer */
+    GetUpdateRebootStateCallbackFunc GetUpdateRebootStateCallback; /**< GetUpdateRebootState function pointer */
 
     SandboxCreateCallbackFunc SandboxCreateCallback; /**< Sandbox creation message handler. */
     SandboxDestroyCallbackFunc SandboxDestroyCallback; /**< Sandbox destruction message handler. */

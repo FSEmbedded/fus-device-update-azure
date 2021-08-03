@@ -228,14 +228,16 @@ private:
             });
     }
 
-    static ADUC_Result UpdateVersionFileCallback(
-    ADUC_Token token, const char* workflowId, const char* updateType, const char* installedCriteria) noexcept
+    static ADUC_Result GetUpdateRebootStateCallback(
+        ADUC_Token token, const char* workflowId, const char* updateType, const char* installedCriteria) noexcept
     {
-        Log_Info("UpdateVersionFileCallback called");
+        Log_Info("GetUpdateRebootStateCallback called");
 
         return ADUC::ExceptionUtils::CallResultMethodAndHandleExceptions(
-            ADUC_UpdateVersionFileResult_Failure, [&token, &workflowId, &updateType, &installedCriteria]() -> ADUC_Result {
-                return static_cast<LinuxPlatformLayer*>(token)->UpdateVersionFile(workflowId, updateType, installedCriteria);
+            ADUC_GetUpdateRebootStateResult_FAILURE,
+            [&token, &workflowId, &updateType, &installedCriteria]() -> ADUC_Result {
+                return static_cast<LinuxPlatformLayer*>(token)->GetUpdateRebootState(
+                    workflowId, updateType, installedCriteria);
             });
     }
 
@@ -317,7 +319,7 @@ private:
     void Cancel(const char* workflowId);
 
     ADUC_Result IsInstalled(const char* workflowId, const char* updateType, const char* installedCriteria);
-    ADUC_Result UpdateVersionFile(const char* workflowId, const char* updateType, const char* installedCriteria);
+    ADUC_Result GetUpdateRebootState(const char* workflowId, const char* updateType, const char* installedCriteria);
 
     /**
      * @brief Class implementation of SandboxCreate method.
