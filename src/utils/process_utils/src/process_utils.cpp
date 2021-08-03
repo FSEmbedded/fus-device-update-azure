@@ -75,17 +75,18 @@ int ADUC_LaunchChildProcess(const std::string& command, std::vector<std::string>
     {
         // Running inside child process.
         /**
-            * Run child process as 'root'.
-            * fw_setenv and fw_printenv are only accessible to root
-            * This is done in the cild process so we don't mess up the
-            * permissions for logging,conf and do-agent
-        */
+         * Run child process as 'root'.
+         * fw_setenv and fw_printenv are only accessible to root
+         * This is done in the cild process so we don't mess up the
+         * permissions for logging,conf and do-agent
+         */
         int defaultUserId = getuid();
         int effectiveUserId = geteuid();
 
         if (setuid(effectiveUserId) != 0)
         {
-            Log_Error("setuid failed: uid(%d), defaultUid(%d), effectiveUid(%d)", getuid(), defaultUserId, effectiveUserId);
+            Log_Error(
+                "setuid failed: uid(%d), defaultUid(%d), effectiveUid(%d)", getuid(), defaultUserId, effectiveUserId);
             return 7;
         }
 

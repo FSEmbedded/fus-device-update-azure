@@ -12,9 +12,10 @@
 #include <memory>
 #include <signal.h> // raise()
 #include <string>
+#include <sys/reboot.h> // reboot()
+#include <time.h>
 #include <unistd.h> // sync()
 #include <vector>
-#include <sys/reboot.h> // reboot()
 EXTERN_C_BEGIN
 
 /**

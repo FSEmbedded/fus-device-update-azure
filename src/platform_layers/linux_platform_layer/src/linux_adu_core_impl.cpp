@@ -7,9 +7,9 @@
 #include "linux_adu_core_impl.hpp"
 #include <aduc/content_handler_factory.hpp>
 #include <aduc/hash_utils.h>
+#include <aduc/string_c_utils.h>
 #include <aduc/string_utils.hpp>
 #include <aduc/system_utils.h>
-#include <aduc/string_c_utils.h>
 
 #include <cstring>
 #include <sys/stat.h>
@@ -23,9 +23,9 @@
 #include <do_download.h>
 #include <do_exceptions.h>
 
+#include <filesystem>
 #include <fstream>
 #include <iostream>
-#include <filesystem>
 
 namespace MSDO = microsoft::deliveryoptimization;
 
@@ -270,12 +270,12 @@ ADUC_Result LinuxPlatformLayer::Download(const char* workflowId, const char* upd
     {
         // We create the content handler as part of the Download phase since this is the start of the rollout workflow
         // and we need to call into the content handler for any additional downloads it may need.
-        char *typeName[12]; // fus/fsupdate
-        char *typeVersion[11]; // application or firmware
-        ADUC_ParseUpdateType(updateType,typeName,typeVersion);
+        char* typeName[12]; // fus/fsupdate
+        char* typeVersion[11]; // application or firmware
+        ADUC_ParseUpdateType(updateType, typeName, typeVersion);
 
         _contentHandler = ContentHandlerFactory::Create(
-            updateType, { info->WorkFolder, ADUC_LOG_FOLDER, entity.TargetFilename, entity.FileId , *typeVersion});
+            updateType, { info->WorkFolder, ADUC_LOG_FOLDER, entity.TargetFilename, entity.FileId, *typeVersion });
 
         const ADUC_Result contentHandlerResult{ _contentHandler->Download() };
         resultCode = contentHandlerResult.ResultCode;
@@ -386,11 +386,11 @@ LinuxPlatformLayer::IsInstalled(const char* workflowId, const char* updateType, 
     {
         try
         {
-            char *typeName[12]; // fus/fsupdate
-            char *typeVersion[11]; // application or firmware
-            ADUC_ParseUpdateType(updateType,typeName,typeVersion);
+            char* typeName[12]; // fus/fsupdate
+            char* typeVersion[11]; // application or firmware
+            ADUC_ParseUpdateType(updateType, typeName, typeVersion);
 
-             _contentHandler = ContentHandlerFactory::Create(updateType, {*typeVersion});
+            _contentHandler = ContentHandlerFactory::Create(updateType, { *typeVersion });
 
             // _contentHandler = ContentHandlerFactory::Create(updateType, ContentHandlerCreateData{});
         }
@@ -473,7 +473,7 @@ ADUC_Result LinuxPlatformLayer::SandboxCreate(const char* workflowId, char** wor
     std::string tmp;
 
     //Find's all folders in /tmp
-    for (auto &p : std::filesystem::directory_iterator(tempPath))
+    for (auto& p : std::filesystem::directory_iterator(tempPath))
     {
         tmp = p.path();
         //delete all sandbox folders

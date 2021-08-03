@@ -7,13 +7,13 @@
 #include "aduc/system_utils.h"
 
 #include <algorithm>
+#include <dirent.h>
 #include <fstream>
 #include <functional>
+#include <iostream>
 #include <memory>
 #include <sstream>
 #include <string>
-#include <iostream>
-#include <dirent.h>
 
 /**
  * @brief handler creation function
@@ -39,7 +39,10 @@ static ADUC_Result CancelApply(const char* logFolder);
  * @return std::unique_ptr<ContentHandler> SimulatorHandlerImpl object as a ContentHandler.
  */
 std::unique_ptr<ContentHandler> FSUpdateHandlerImpl::CreateContentHandler(
-    const std::string& workFolder, const std::string& logFolder, const std::string& filename, const std::string& fileType)
+    const std::string& workFolder,
+    const std::string& logFolder,
+    const std::string& filename,
+    const std::string& fileType)
 {
     return std::unique_ptr<ContentHandler>{ new FSUpdateHandlerImpl(workFolder, logFolder, filename, fileType) };
 }
@@ -53,7 +56,9 @@ ADUC_Result FSUpdateHandlerImpl::Prepare(const ADUC_PrepareInfo* prepareInfo)
 {
     if (prepareInfo->updateTypeVersion != _applicationFile && prepareInfo->updateTypeVersion != _firmwareFile)
     {
-        Log_Error("FsUpdate packages prepare failed. Wrong Handler Version '%s'. Select 'application' or 'firmware' ", prepareInfo->updateTypeVersion);
+        Log_Error(
+            "FsUpdate packages prepare failed. Wrong Handler Version '%s'. Select 'application' or 'firmware' ",
+            prepareInfo->updateTypeVersion);
         return ADUC_Result{ ADUC_PrepareResult_Failure,
                             ADUC_ERC_SWUPDATE_HANDLER_PACKAGE_PREPARE_FAILURE_WRONG_VERSION };
     }
@@ -136,11 +141,10 @@ ADUC_Result FSUpdateHandlerImpl::Install()
 
     Log_Info("Installing image file: '%s' type: '%s'", filename, _fileType.c_str());
 
-
     std::string command = _pathToFsUpdate;
-    std::vector<std::string> args{ };
+    std::vector<std::string> args{};
 
-    if ( _fileType == _applicationFile)
+    if (_fileType == _applicationFile)
     {
         args.emplace_back(_installApplicationFile);
     }
@@ -192,7 +196,7 @@ ADUC_Result FSUpdateHandlerImpl::Apply()
     _isApply = true;
 
     std::string command = _pathToFsUpdate;
-    std::vector<std::string> args{ _commitUpdate, _debugMode};
+    std::vector<std::string> args{ _commitUpdate, _debugMode };
     std::string output;
 
     const int exitCode = ADUC_LaunchChildProcess(command, args, output);
@@ -304,14 +308,13 @@ ADUC_Result FSUpdateHandlerImpl::UpdateVersionFile(const std::string& newVersion
  */
 ADUC_Result FSUpdateHandlerImpl::IsInstalled(const std::string& installedCriteria)
 {
-
     std::string version;
 
-    if(_fileType == _firmwareFile)
+    if (_fileType == _firmwareFile)
     {
         version = ReadValueFromFile(FIRMWARE_VERSION_FILE);
     }
-    else if(_fileType == _applicationFile)
+    else if (_fileType == _applicationFile)
     {
         version = ReadValueFromFile(APP_VERSION_FILE);
     }
