@@ -991,6 +991,12 @@ void ADUC_MethodCall_Install_Complete(ADUC_MethodCall_Data* methodCallData, ADUC
 
     ADUC_InstallInfo_UnInit(info);
     methodCallData->MethodSpecificData.InstallInfo = NULL;
+
+    /**
+     * This is added, so that we can us the information in the apply step
+     * to prevent its execution if the reboot failes.
+    */
+    methodCallData->WorkflowData->SystemRebootState = ADUC_SystemRebootState_Required;
 }
 
 /**
@@ -1010,7 +1016,21 @@ ADUC_Result ADUC_MethodCall_Apply(ADUC_MethodCall_Data* methodCallData)
 
     methodCallData->MethodSpecificData.ApplyInfo = NULL;
 
-    if (workflowData->LastReportedState != ADUCITF_State_InstallSucceeded)
+    if (workflowData->SystemRebootState == ADUC_SystemRebootState_Required)
+    {
+        if (workflowData->LastReportedState != ADUCITF_State_InstallSucceeded)
+        {
+            Log_Error("Apply called, but a reboot is required, that could mean, that the system reboot failed ");
+            result.ResultCode = ADUC_ApplyResult_Failure;
+            result.ExtendedResultCode = ADUC_ERC_NOTPERMITTED;
+            goto done;
+        }
+
+        ADUC_MethodCall_RebootSystem();
+    }
+
+    if (workflowData->LastReportedState != ADUCITF_State_InstallSucceeded
+        && workflowData->LastReportedState != ADUCITF_State_Failed)
     {
         Log_Error(
             "Apply UpdateAction called in unexpected state: %s!",
@@ -1061,42 +1081,8 @@ void ADUC_MethodCall_Apply_Complete(ADUC_MethodCall_Data* methodCallData, ADUC_R
     ADUC_ApplyInfo_UnInit(info);
     methodCallData->MethodSpecificData.ApplyInfo = NULL;
 
-    if (result.ResultCode == ADUC_ApplyResult_SuccessRebootRequired)
+    if (result.ResultCode == ADUC_ApplyResult_Success)
     {
-        // If apply indicated a reboot required result from apply, go ahead and reboot.
-        Log_Info("Apply indicated success with RebootRequired - rebooting system now");
-        methodCallData->WorkflowData->SystemRebootState = ADUC_SystemRebootState_Required;
-        int success = ADUC_MethodCall_RebootSystem();
-        if (success == 0)
-        {
-            methodCallData->WorkflowData->SystemRebootState = ADUC_SystemRebootState_InProgress;
-        }
-        else
-        {
-            Log_Error("Reboot attempt failed.");
-            methodCallData->WorkflowData->OperationInProgress = false;
-        }
-    }
-    else if (result.ResultCode == ADUC_ApplyResult_SuccessAgentRestartRequired)
-    {
-        // If apply indicated a restart is required, go ahead and restart the agent.
-        Log_Info("Apply indicated success with AgentRestartRequired - restarting the agent now");
-        methodCallData->WorkflowData->SystemRebootState = ADUC_SystemRebootState_Required;
-        int success = ADUC_MethodCall_RestartAgent();
-        if (success == 0)
-        {
-            methodCallData->WorkflowData->AgentRestartState = ADUC_AgentRestartState_InProgress;
-        }
-        else
-        {
-            Log_Error("Agent restart attempt failed.");
-            methodCallData->WorkflowData->OperationInProgress = false;
-        }
-    }
-    else if (result.ResultCode == ADUC_ApplyResult_Success)
-    {
-        //After successfull Apply Action we have to modify the fw_version
-        ADUC_MethodCall_UpdateVersionFile(methodCallData->WorkflowData);
         // An Apply action completed successfully. Continue to the next step.
         methodCallData->WorkflowData->OperationInProgress = false;
     }
