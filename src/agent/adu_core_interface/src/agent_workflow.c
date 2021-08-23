@@ -534,9 +534,7 @@ void ADUC_Workflow_HandleStartupWorkflowData(ADUC_WorkflowData* workflowData)
                 workflowData->LastReportedState = ADUCITF_State_InstallSucceeded;
                 workflowData->CurrentAction = ADUCITF_State_ApplyStarted;
                 workflowData->StartupIdleCallSent = true;
-
                 ADUC_Workflow_HandleUpdateAction(workflowData);
-                ADUC_SetInstalledUpdateIdAndGoToIdle(workflowData, workflowData->ContentData->ExpectedUpdateId);
             }
             break;
 
@@ -551,8 +549,6 @@ void ADUC_Workflow_HandleStartupWorkflowData(ADUC_WorkflowData* workflowData)
             ADUC_SetUpdateStateWithResult(workflowData, ADUCITF_State_Failed, result);
             break;
         }
-
-        ADUC_SetUpdateStateWithResult(workflowData, ADUCITF_State_Idle, result);
 
     done:
         // Once we set Idle state to the orchestrator we can start receiving update actions.

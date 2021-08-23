@@ -221,8 +221,8 @@ void ADUC_MethodCall_Cancel(const ADUC_WorkflowData* workflowData);
 
 ADUC_Result ADUC_MethodCall_IsInstalled(const ADUC_WorkflowData* workflowData);
 
-
 ADUC_Result ADUC_MethodCall_GetUpdateRebootState(const ADUC_WorkflowData* workflowData);
+
 //
 // State transition
 //
