@@ -5,6 +5,7 @@
  * @copyright Copyright (c) 2019, Microsoft Corporation.
  */
 #include "linux_adu_core_impl.hpp"
+#include "aduc/process_utils.hpp"
 #include <aduc/content_handler_factory.hpp>
 #include <aduc/hash_utils.h>
 #include <aduc/string_c_utils.h>
@@ -471,7 +472,7 @@ ADUC_Result LinuxPlatformLayer::SandboxCreate(const char* workflowId, char** wor
     // Try to delete existing directory.
     int dir_result;
     std::string tmp;
-
+    bool restartDoAgent = false;
     //Find's all folders in /tmp
     for (auto& p : std::filesystem::directory_iterator(tempPath))
     {
@@ -479,12 +480,37 @@ ADUC_Result LinuxPlatformLayer::SandboxCreate(const char* workflowId, char** wor
         //delete all sandbox folders
         if (tmp.std::string::find("/aduc-dl-") != std::string::npos)
         {
+            restartDoAgent = true;
+            Log_Info("Removing old sandbox %s", tmp.c_str());
+
             dir_result = ADUC_SystemUtils_RmDirRecursive(tmp.c_str());
             if (dir_result != 0)
             {
                 // Not critical if failed.
                 Log_Info("Unable to remove folder %s, error %d", tmp.c_str(), dir_result);
             }
+        }
+    }
+
+    /**
+     * If there was a sandbox folder that had to be deleted, we also have to restart
+     * the do-agent service, otherwise do-agent will crash with an out_of_memory error
+     * if we start another download before the old one has finished properly.
+    */
+    if (restartDoAgent == true)
+    {
+        std::vector<std::string> args{ "restart", "deliveryoptimization-agent.service" };
+        std::string output;
+        int exitStatus = ADUC_LaunchChildProcess("/bin/systemctl", args, output);
+
+        if (exitStatus != 0)
+        {
+            Log_Error("DO-Agent restared failed.");
+        }
+
+        if (!output.empty())
+        {
+            Log_Info(output.c_str());
         }
     }
 
