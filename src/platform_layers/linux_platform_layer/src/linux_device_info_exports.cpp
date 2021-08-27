@@ -305,6 +305,7 @@ EXTERN_C_BEGIN
  *
  * @param property Property to retrieve
  * @return char* Value of property allocated with malloc, or nullptr on error or value not changed since last call.
+ * Doesn't work at the with the F&S Board at the moment. Because the vendor info is missing from /var/proc
  */
 char* DI_GetDeviceInformationValue(DI_DeviceInfoProperty property)
 {
@@ -318,7 +319,6 @@ char* DI_GetDeviceInformationValue(DI_DeviceInfoProperty property)
             { DIIP_OsName, DeviceInfo_GetOsName },
             { DIIP_SoftwareVersion, DeviceInfo_GetSwVersion },
             { DIIP_ProcessorArchitecture, DeviceInfo_GetProcessorArchitecture },
-            { DIIP_ProcessorManufacturer, DeviceInfo_GetProcessorManufacturer },
             { DIIP_TotalMemory, DeviceInfo_GetTotalMemory },
             { DIIP_TotalStorage, DeviceInfo_GetTotalStorage },
         };

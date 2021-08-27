@@ -345,6 +345,7 @@ done:
     else
     {
         free(name);
+        free(type);
     }
 
     return succeeded;
