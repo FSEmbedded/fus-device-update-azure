@@ -628,6 +628,20 @@ _Bool ADUC_DeviceClient_Create(ADUC_ConnectionInfo* connInfo, const ADUC_LaunchA
         Log_Error("Failure creating IotHub device client using MQTT protocol. Check your connection string.");
         result = false;
     }
+    else if (
+        connInfo->x509certificate != NULL
+        && (iothubResult = ClientHandle_SetOption(g_iotHubClientHandle,OPTION_X509_CERT,connInfo->x509certificate) != IOTHUB_CLIENT_OK))
+    {
+        Log_Error("Unable to set certificate string for validation");
+        result = false;
+    }
+    else if (
+        connInfo->x509privatekey != NULL
+        && (iothubResult = ClientHandle_SetOption(g_iotHubClientHandle,OPTION_X509_PRIVATE_KEY,connInfo->x509privatekey) != IOTHUB_CLIENT_OK))
+    {
+        Log_Error("Unable to set private key string for validation");
+        result = false;
+    }
     // Sets IoTHub tracing verbosity level.
     else if (
         (iothubResult =
@@ -790,6 +804,7 @@ _Bool GetConnectionInfoFromConnectionString(ADUC_ConnectionInfo* info, const cha
 
     memset(info, 0, sizeof(*info));
 
+    char certificatePath[1024];
     char certificateString[8192];
 
     if (mallocAndStrcpy_s(&info->connectionString, connectionString) != 0)
@@ -824,6 +839,46 @@ _Bool GetConnectionInfoFromConnectionString(ADUC_ConnectionInfo* info, const cha
         }
 
         info->authType = ADUC_AuthType_NestedEdgeCert;
+    }
+
+    // Optional: self signed X509
+    if (ReadDelimitedValueFromFile(
+            ADUC_X509_CONF_FILE_PATH, "x509_cert_path", certificatePath, ARRAY_SIZE(certificatePath)))
+    {
+        if (!LoadBufferWithFileContents(certificatePath, certificateString, ARRAY_SIZE(certificateString)))
+        {
+            Log_Error("Failed to read the certificate from path: %s", certificatePath);
+            goto done;
+        }
+
+        if (mallocAndStrcpy_s(&info->x509certificate, certificateString) != 0)
+        {
+            Log_Error("Failed to copy certificate string.");
+            goto done;
+        }
+
+        if (ReadDelimitedValueFromFile(
+                ADUC_X509_CONF_FILE_PATH, "x509_key_path", certificatePath, ARRAY_SIZE(certificatePath)))
+        {
+            if (!LoadBufferWithFileContents(certificatePath, certificateString, ARRAY_SIZE(certificateString)))
+            {
+                Log_Error("Failed to read the private key from path: %s", certificatePath);
+                goto done;
+            }
+
+            if (mallocAndStrcpy_s(&info->x509privatekey, certificateString) != 0)
+            {
+                Log_Error("Failed to copy private key string.");
+                goto done;
+            }
+        }
+
+        //Log_Info("###GetConnectionInfoFromADUConfigFile\n");
+        //Log_Info("###certificateString: %s", certificateString);
+        //Log_Info("###x509certificate: %s", info->x509certificate);
+        //Log_Info("###x509privatekey: %s", info->x509privatekey);
+        //info->authType = ADUC_AuthType_NestedEdgeCert;
+        info->authType = ADUC_AuthType_X509;
     }
 
     succeeded = true;

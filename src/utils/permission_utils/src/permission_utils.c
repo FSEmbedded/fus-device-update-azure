@@ -5,6 +5,7 @@
  * @copyright Copyright (c) Microsoft Corporation.
  * Licensed under the MIT License.
  */
+#define _DEFAULT_SOURCE
 #include "aduc/permission_utils.h"
 #include "aduc/bit_ops.h" // for BitOps_AreAllBitsSet
 #include <grp.h> // for getgrnam

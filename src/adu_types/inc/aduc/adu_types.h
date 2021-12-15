@@ -46,6 +46,7 @@ typedef enum tagADUC_AuthType
     ADUC_AuthType_SASToken = 1,
     ADUC_AuthType_SASCert = 2,
     ADUC_AuthType_NestedEdgeCert = 3,
+    ADUC_AuthType_X509 = 4,
 } ADUC_AuthType;
 
 /**
@@ -59,6 +60,8 @@ typedef struct tagConnectionInfo
     char* certificateString; /**< x509 certificate in PEM format for the IoTHubClient to be used for authentication*/
     char* opensslEngine; /**< identifier for the OpenSSL Engine used for the certificate in certificateString*/
     char* opensslPrivateKey; /**< x509 private key in PEM format for the IoTHubClient to be used for authentication */
+    char* x509certificate;
+    char* x509privatekey;
 } ADUC_ConnectionInfo;
 
 /**
