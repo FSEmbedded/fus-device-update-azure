@@ -1,4 +1,4 @@
-# This clang-format file requires clang 6.0.
+﻿# This clang-format file requires clang 6.0.
 # $ sudo apt-get install clang-format-6.0
 #
 # http://clang.llvm.org/docs/ClangFormatStyleOptions.html

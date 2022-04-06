@@ -4,7 +4,8 @@
  *
  *        DeviceInfo only reports properties defining the device and does not accept requested properties or commands.
  *
- * @copyright Copyright (c) 2019, Microsoft Corp.
+ * @copyright Copyright (c) Microsoft Corporation.
+ * Licensed under the MIT License.
  */
 #ifndef ADUC_DEVICE_INFO_INTERFACE_H
 #define ADUC_DEVICE_INFO_INTERFACE_H

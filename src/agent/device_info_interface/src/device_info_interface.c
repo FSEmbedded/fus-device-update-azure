@@ -2,7 +2,8 @@
  * @file device_info_interface.c
  * @brief Methods to communicate with "dtmi:azure:DeviceManagement:DeviceInformation;1" interface.
  *
- * @copyright Copyright (c) 2019, Microsoft Corp.
+ * @copyright Copyright (c) Microsoft Corporation.
+ * Licensed under the MIT License.
  */
 #include "aduc/device_info_interface.h"
 #include "aduc/c_utils.h"
@@ -60,6 +61,8 @@ static DeviceInfoInterface_Data deviceInfoInterface_Data[] = {
     { DIIP_ProcessorManufacturer, "processorManufacturer", DIIDT_String },
     { DIIP_TotalMemory, "totalMemory", DIIDT_Long },
     { DIIP_TotalStorage, "totalStorage", DIIDT_Long },
+    { DIIP_FirmwareVersion, "fwVersion", DIIDT_Long },
+    { DIIP_ApplicationVersion, "appVersion", DIIDT_Long }
 };
 
 /**
@@ -227,10 +230,7 @@ IOTHUB_CLIENT_RESULT ReportChangedProperty(DeviceInfoInterface_Data* data)
     }
 
 done:
-    if (jsonToSend != NULL)
-    {
-        STRING_delete(jsonToSend);
-    }
+    STRING_delete(jsonToSend);
 
     return iothubClientResult;
 }
@@ -299,20 +299,9 @@ IOTHUB_CLIENT_RESULT DeviceInfoInterface_ReportChangedPropertiesAsync()
     }
 
 done:
-    if (root_value != NULL)
-    {
-        json_value_free(root_value);
-    }
-
-    if (serialized_string)
-    {
-        json_free_serialized_string(serialized_string);
-    }
-
-    if (jsonToSend != NULL)
-    {
-        STRING_delete(jsonToSend);
-    }
+    json_value_free(root_value);
+    json_free_serialized_string(serialized_string);
+    STRING_delete(jsonToSend);
 
     return iothubClientResult;
 }

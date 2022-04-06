@@ -2,7 +2,8 @@
  * @file eis_utils.h
  * @brief Header file for the Edge Identity Service (EIS) Utility
  *
- * @copyright Copyright (c) 2019, Microsoft Corporation.
+ * @copyright Copyright (c) Microsoft Corporation.
+ * Licensed under the MIT License.
  */
 #include <aduc/adu_types.h>
 #include <aduc/c_utils.h>

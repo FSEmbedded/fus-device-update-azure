@@ -7,6 +7,16 @@ include (agentRules)
 compileasc99 ()
 disablertti ()
 
+if(NOT DEFINED FIRMWARE_VERSION_CHECK_CMD)
+  message(FATAL_ERROR "Command to check the firmware version file; Set command \"-DFIRMWARE_VERSION_CHECK_CMD:STRING=\"")
+endif(NOT DEFINED FIRMWARE_VERSION_CHECK_CMD)
+
+if(NOT DEFINED APPLICATION_VERSION_CHECK_CMD)
+  message(FATAL_ERROR "Command to check the application version file; Set command \"-DAPPLICATION_VERSION_CHECK_CMD:STRING=\"")
+endif(NOT DEFINED APPLICATION_VERSION_CHECK_CMD)
+
+add_compile_definitions (APPLICATION_VERSION_CHECK_CMD="${APPLICATION_VERSION_CHECK_CMD}" FIRMWARE_VERSION_CHECK_CMD="${FIRMWARE_VERSION_CHECK_CMD}")
+
 add_library (${target_name} STATIC src/linux_adu_core_exports.cpp src/linux_device_info_exports.cpp
                                    src/linux_adu_core_impl.cpp)
 
@@ -16,17 +26,27 @@ target_include_directories (${target_name} PUBLIC ${ADUC_EXPORT_INCLUDES})
 
 target_link_libraries (
     ${target_name}
-    PRIVATE aduc::content_handlers
+    PRIVATE aduc::adu_types
+            aduc::agent_workflow
             aduc::c_utils
-            aduc::string_utils
+            aduc::config_utils
+            aduc::content_handlers
             aduc::exception_utils
+            aduc::extension_manager
             aduc::hash_utils
             aduc::logging
             aduc::process_utils
             aduc::string_utils
-            aduc::system_utils)
+            aduc::system_utils
+            aduc::workflow_data_utils
+            aduc::workflow_utils)
 
 target_link_dosdk (${target_name} PRIVATE)
+
+#
+# Turn -fPIC on, in order to use this library in another shared library.
+#
+set_property (TARGET ${target_name} PROPERTY POSITION_INDEPENDENT_CODE ON)
 
 execute_process (
     COMMAND lsb_release --id --short
@@ -49,9 +69,11 @@ target_compile_definitions (
     ${target_name}
     PRIVATE ADUC_DEVICEINFO_MANUFACTURER="${ADUC_DEVICEINFO_MANUFACTURER}"
             ADUC_CONF_FILE_PATH="${ADUC_CONF_FILE_PATH}"
+            ADUC_FILE_GROUP="${ADUC_FILE_GROUP}"
+            ADUC_FILE_USER="${ADUC_FILE_USER}"
             ADUC_DEVICEINFO_MODEL="${ADUC_DEVICEINFO_MODEL}"
-            FIRMWARE_VERSION_FILE="${FIRMWARE_VERSION_FILE}"
-            APP_VERSION_FILE="${APP_VERSION_FILE}")
+            ADUC_VERSION_FILE="${ADUC_VERSION_FILE}"
+            ADUC_BUILD_UNIT_TESTS="${ADUC_BUILD_UNIT_TESTS}")
 
 if (ADUC_BUILD_UNIT_TESTS)
     add_subdirectory (tests)

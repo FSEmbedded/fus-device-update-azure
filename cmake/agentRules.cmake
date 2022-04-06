@@ -1,3 +1,6 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
 macro (compileAsC99)
     if (CMAKE_VERSION VERSION_LESS "3.1")
         if (CMAKE_C_COMPILER_ID STREQUAL "GNU")
@@ -10,7 +13,7 @@ macro (compileAsC99)
         endif ()
     else ()
         set (CMAKE_C_STANDARD 99)
-        set (CMAKE_CXX_STANDARD 17)
+        set (CMAKE_CXX_STANDARD 11)
     endif ()
 endmacro (compileAsC99)
 

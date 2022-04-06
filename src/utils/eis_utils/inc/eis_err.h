@@ -2,7 +2,8 @@
  * @file eis_err.h
  * @brief Header file defining the errors which can occur within the Edge Identity Service (EIS) Utility
  *
- * @copyright Copyright (c) 2020, Microsoft Corporation.
+ * @copyright Copyright (c) Microsoft Corporation.
+ * Licensed under the MIT License.
  */
 #include <aduc/c_utils.h>
 

@@ -2,7 +2,8 @@
  * @file eis_coms.h
  * @brief Header file for HTTP communication with Edge Identity Service (EIS) over UDS
  *
- * @copyright Copyright (c) 2019, Microsoft Corporation.
+ * @copyright Copyright (c) Microsoft Corporation.
+ * Licensed under the MIT License.
  */
 #include <aduc/c_utils.h>
 #include <eis_err.h>

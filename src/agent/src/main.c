@@ -1,15 +1,21 @@
 /**
  * @file main.c
- * @brief Implements the main code for the Azure Device Update Agent.
+ * @brief Implements the main code for the Device Update Agent.
  *
- * @copyright Copyright (c) 2019, Microsoft Corporation.
+ * @copyright Copyright (c) Microsoft Corporation.
+ * Licensed under the MIT License.
  */
 #include "aduc/adu_core_export_helpers.h"
 #include "aduc/adu_core_interface.h"
 #include "aduc/adu_types.h"
+#include "aduc/agent_workflow.h"
 #include "aduc/c_utils.h"
 #include "aduc/client_handle_helper.h"
+#include "aduc/config_utils.h"
+#include "aduc/connection_string_utils.h"
 #include "aduc/device_info_interface.h"
+#include "aduc/extension_manager.h"
+#include "aduc/extension_utils.h"
 #include "aduc/health_management.h"
 #include "aduc/logging.h"
 #include "aduc/string_c_utils.h"
@@ -18,8 +24,11 @@
 #include <azure_c_shared_utility/threadapi.h> // ThreadAPI_Sleep
 #include <ctype.h>
 #ifndef ADUC_PLATFORM_SIMULATOR // DO is not used in sim mode
+#    include "aduc/connection_string_utils.h"
 #    include <do_config.h>
 #endif
+#include <diagnostics_devicename.h>
+#include <diagnostics_interface.h>
 #include <getopt.h>
 #include <iothub.h>
 #include <iothub_client_options.h>
@@ -34,22 +43,32 @@
 
 #include "pnp_protocol.h"
 
-#ifdef ADUC_PROVISION_WITH_EIS
-
-#    include "eis_utils.h"
+#include "eis_utils.h"
 
 /**
  * @brief The timeout for the Edge Identity Service HTTP requests
  */
-#    define EIS_PROVISIONING_TIMEOUT 2000
+#define EIS_PROVISIONING_TIMEOUT 2000
 
-#    define SECONDS_IN_MONTH (30 /* day/mo */ * 24 /* hr/day */ * 60 /* min/hr */ * 60 /*sec/min */)
+#define SECONDS_IN_MONTH (30 /* day/mo */ * 24 /* hr/day */ * 60 /* min/hr */ * 60 /*sec/min */)
 /**
  * @brief Time after startup the connection string will be provisioned for by the Edge Identity Service
  */
-#    define EIS_TOKEN_EXPIRY_TIME (3 * SECONDS_IN_MONTH)
+#define EIS_TOKEN_EXPIRY_TIME (3 * SECONDS_IN_MONTH)
 
-#endif
+/**
+ * @brief Make getopt* stop parsing as soon as non-option argument is encountered.
+ * @remark See GETOPT.3 man page for more details.
+ */
+#define STOP_PARSE_ON_NONOPTION_ARG "+"
+
+/**
+ * @brief Make getopt* return a colon instead of question mark when an option is missing its corresponding option argument, so we can distinguish these scenarios.
+ * Also, this suppresses printing of an error message.
+ * @remark It must come directly after a '+' or '-' first character in the optionstring.
+ * See GETOPT.3 man page for more details.
+ */
+#define RET_COLON_FOR_MISSING_OPTIONARG ":"
 
 /**
  * @brief The Device Twin Model Identifier.
@@ -57,13 +76,17 @@
  *
  * Customers should change this ID to match their device model ID.
  */
-static const char g_aduModelId[] = "dtmi:AzureDeviceUpdate;1";
+
+static const char g_aduModelId[] = "dtmi:azure:iot:deviceUpdateModel;1";
 
 // Name of ADU Agent subcomponent that this device implements.
-static const char g_aduPnPComponentName[] = "azureDeviceUpdateAgent";
+static const char g_aduPnPComponentName[] = "deviceUpdate";
 
 // Name of DeviceInformation subcomponent that this device implements.
 static const char g_deviceInfoPnPComponentName[] = "deviceInformation";
+
+// Name of the Diagnostics subcomponent that this device is using
+static const char g_diagnosticsPnPComponentName[] = "diagnosticInformation";
 
 // Engine type for an OpenSSL Engine
 static const OPTION_OPENSSL_KEY_TYPE x509_key_from_engine = KEY_TYPE_ENGINE;
@@ -137,7 +160,7 @@ typedef struct tagPnPComponentEntry
     const PnPComponentDestroyFunc Destroy;
     const PnPComponentPropertyUpdateCallback
         PnPPropertyUpdateCallback; /**< Called when a component's property is updated. (optional) */
-
+    
     //
     // Following data is dynamic.
     // Must be initialized to NULL in map and remain last entries in this struct.
@@ -171,7 +194,17 @@ static PnPComponentEntry componentList[] = {
         AzureDeviceUpdateCoreInterface_Destroy,
         AzureDeviceUpdateCoreInterface_PropertyUpdateCallback
     },
+    {
+        g_diagnosticsPnPComponentName,
+        &g_iotHubClientHandleForDiagnosticsComponent,
+        DiagnosticsInterface_Create,
+        DiagnosticsInterface_Connected,
+        NULL,
+        DiagnosticsInterface_Destroy,
+        DiagnosticsInterface_PropertyUpdateCallback
+    },
 };
+
 // clang-format on
 
 /**
@@ -180,7 +213,9 @@ static PnPComponentEntry componentList[] = {
  * @param argv arguments array.
  * @param launchArgs a struct to store the parsed arguments.
  *
- * @return 0 if succeeded.
+ * @return 0 if succeeded without additional non-option args,
+ * -1 on failure,
+ *  or positive index to argv index where additional args start on success with additional args.
  */
 int ParseLaunchArguments(const int argc, char** argv, ADUC_LaunchArguments* launchArgs)
 {
@@ -201,11 +236,16 @@ int ParseLaunchArguments(const int argc, char** argv, ADUC_LaunchArguments* laun
         // clang-format off
         static struct option long_options[] =
         {
-            { "version",               no_argument,   0, 'v' },
-            { "enable-iothub-tracing", no_argument,   0, 'e' },
-            { "health-check",          no_argument,   0, 'h' },
-            { "log-level",         required_argument, 0, 'l' },
-            { "connection-string", required_argument, 0, 'c' },
+            { "version",                       no_argument,       0, 'v' },
+            { "enable-iothub-tracing",         no_argument,       0, 'e' },
+            { "health-check",                  no_argument,       0, 'h' },
+            { "log-level",                     required_argument, 0, 'l' },
+            { "connection-string",             required_argument, 0, 'c' },
+            { "register-content-handler",      required_argument, 0, 'C' },
+            { "register-component-enumerator", required_argument, 0, 'E' },
+            { "register-content-downloader",   required_argument, 0, 'D' },
+            { "update-type",                   required_argument, 0, 'u' },
+            { "run-as-owner",                  no_argument,       0, 'a' },
             { 0, 0, 0, 0 }
         };
         // clang-format on
@@ -213,7 +253,12 @@ int ParseLaunchArguments(const int argc, char** argv, ADUC_LaunchArguments* laun
         /* getopt_long stores the option index here. */
         int option_index = 0;
 
-        int option = getopt_long(argc, argv, "vehc:l:", long_options, &option_index);
+        int option = getopt_long(
+            argc,
+            argv,
+            STOP_PARSE_ON_NONOPTION_ARG RET_COLON_FOR_MISSING_OPTIONARG "avehcu:l:r:d:n:C:E:D:",
+            long_options,
+            &option_index);
 
         /* Detect the end of the options. */
         if (option == -1)
@@ -256,7 +301,23 @@ int ParseLaunchArguments(const int argc, char** argv, ADUC_LaunchArguments* laun
             launchArgs->connectionString = optarg;
             break;
 
-        case '?':
+        case 'C':
+            launchArgs->contentHandlerFilePath = optarg;
+            break;
+
+        case 'D':
+            launchArgs->contentDownloaderFilePath = optarg;
+            break;
+
+        case 'E':
+            launchArgs->componentEnumeratorFilePath = optarg;
+            break;
+
+        case 'u':
+            launchArgs->updateType = optarg;
+            break;
+
+        case ':':
             switch (optopt)
             {
             case 'c':
@@ -272,24 +333,45 @@ int ParseLaunchArguments(const int argc, char** argv, ADUC_LaunchArguments* laun
             result = -1;
             break;
 
+        case '?':
+            if (optopt)
+            {
+                printf("Unsupported short argument -%c.\n", optopt);
+            }
+            else
+            {
+                printf(
+                    "Unsupported option '%s'. Try preceding with -- to separate options and additional args.\n",
+                    argv[optind - 1]);
+            }
+            result = -1;
+            break;
         default:
             printf("Unknown argument.");
             result = -1;
         }
     }
 
-    if (optind < argc)
+    if (result != -1 && optind < argc)
     {
         if (launchArgs->connectionString == NULL)
         {
-            // Assuming first unknown option is a connection string.
-            launchArgs->connectionString = argv[optind++];
+            // Assuming first unknown option not starting with '-' is a connection string.
+            for (int i = optind; i < argc; ++i)
+            {
+                if (argv[i][0] != '-')
+                {
+                    launchArgs->connectionString = argv[i];
+                    ++optind;
+                    break;
+                }
+            }
         }
 
         if (optind < argc)
         {
-            // Still have unknown arg(s).
-            result = -1;
+            // Still have unknown arg(s) on the end so return the index in argv where these start.
+            result = optind;
         }
     }
 
@@ -299,6 +381,41 @@ int ParseLaunchArguments(const int argc, char** argv, ADUC_LaunchArguments* laun
     }
 
     return result;
+}
+
+/**
+ * @brief Sets the Diagnostic DeviceName for creating the device's diagnostic container
+ * @param connectionString connectionString to extract the device-id and module-id from
+ * @returns true on success; false on failure
+ */
+_Bool ADUC_SetDiagnosticsDeviceNameFromConnectionString(const char* connectionString)
+{
+    _Bool succeeded = false;
+
+    char* deviceId = NULL;
+
+    char* moduleId = NULL;
+
+    if (!ConnectionStringUtils_GetDeviceIdFromConnectionString(connectionString, &deviceId))
+    {
+        goto done;
+    }
+
+    // Note: not all connection strings have a module-id
+    ConnectionStringUtils_GetModuleIdFromConnectionString(connectionString, &moduleId);
+
+    if (!DiagnosticsComponent_SetDeviceName(deviceId, moduleId))
+    {
+        goto done;
+    }
+
+    succeeded = true;
+
+done:
+
+    free(deviceId);
+    free(moduleId);
+    return succeeded;
 }
 
 //
@@ -344,7 +461,7 @@ void ADUC_PnP_Components_Destroy()
  */
 _Bool ADUC_PnP_Components_Create(ADUC_ClientHandle clientHandle, int argc, char** argv)
 {
-    Log_Info("Initalizing PnP components.");
+    Log_Info("Initializing PnP components.");
     _Bool succeeded = false;
     const unsigned componentCount = ARRAY_SIZE(componentList);
 
@@ -421,10 +538,25 @@ done:
     return;
 }
 
-static const char* g_modeledComponents[] = { g_aduPnPComponentName, g_deviceInfoPnPComponentName };
-static const size_t g_numModeledComponents = sizeof(g_modeledComponents) / sizeof(g_modeledComponents[0]);
+// Note: This is an array of weak references to componentList[i].componentName
+// as such the size of componentList must be equal to the size of g_modeledComponents
+static const char* g_modeledComponents[3];
+
+static const size_t g_numModeledComponents = ARRAY_SIZE(g_modeledComponents);
 
 static bool g_firstDeviceTwinDataProcessed = false;
+
+static void InititalizeModeledComponents()
+{
+    const size_t numModeledComponents = ARRAY_SIZE(g_modeledComponents);
+
+    STATIC_ASSERT(ARRAY_SIZE(componentList) == ARRAY_SIZE(g_modeledComponents));
+
+    for (int i = 0; i < numModeledComponents; ++i)
+    {
+        g_modeledComponents[i] = componentList[i].ComponentName;
+    }
+}
 //
 // ADUC_PnP_DeviceTwin_Callback is invoked by IoT SDK when a twin - either full twin or a PATCH update - arrives.
 //
@@ -600,25 +732,65 @@ _Bool ADUC_DeviceClient_Create(ADUC_ConnectionInfo* connInfo, const ADUC_LaunchA
     return result;
 }
 
-_Bool GetConnectionInfoFromADUConfigFile(ADUC_ConnectionInfo* info)
+/**
+ * @brief Scans the connection string and returns the connection type related to the string
+ * @details The connection string must use the valid, correct format for the DeviceId and/or the ModuleId
+ * e.g.
+ * "DeviceId=some-device-id;ModuleId=some-module-id;"
+ * If the connection string contains the DeviceId it is an ADUC_ConnType_Device
+ * If the connection string contains the DeviceId AND the ModuleId it is an ADUC_ConnType_Module
+ * @param connectionString the connection string to scan
+ * @returns the connection type for @p connectionString
+ */
+ADUC_ConnType GetConnTypeFromConnectionString(const char* connectionString)
+{
+    ADUC_ConnType result = ADUC_ConnType_NotSet;
+
+    if (connectionString == NULL)
+    {
+        Log_Debug("Connection string passed to GetConnTypeFromConnectionString is NULL");
+        return ADUC_ConnType_NotSet;
+    }
+
+    if (ConnectionStringUtils_DoesKeyExist(connectionString, "DeviceId"))
+    {
+        if (ConnectionStringUtils_DoesKeyExist(connectionString, "ModuleId"))
+        {
+            result = ADUC_ConnType_Module;
+        }
+        else
+        {
+            result = ADUC_ConnType_Device;
+        }
+    }
+    else
+    {
+        Log_Debug("DeviceId not present in connection string.");
+    }
+
+    return result;
+}
+
+/**
+ * @brief Get the Connection Info from connection string, if a connection string is provided in configuration file
+ *
+ * @return true if connection info can be obtained
+ */
+_Bool GetConnectionInfoFromConnectionString(ADUC_ConnectionInfo* info, const char* connectionString)
 {
     _Bool succeeded = false;
     if (info == NULL)
     {
         goto done;
     }
-    memset(info, 0, sizeof(*info));
-
-    char connectionString[1024];
-    char certificateString[8192];
-    char certificatePath[1024];
-
-    if (!ReadDelimitedValueFromFile(
-            ADUC_CONF_FILE_PATH, "connection_string", connectionString, ARRAY_SIZE(connectionString)))
+    if (connectionString == NULL)
     {
-        Log_Error("Unable to read connection string from configuration file");
         goto done;
     }
+
+    memset(info, 0, sizeof(*info));
+
+    char certificateString[8192];
 
     if (mallocAndStrcpy_s(&info->connectionString, connectionString) != 0)
     {
@@ -636,12 +808,12 @@ _Bool GetConnectionInfoFromADUConfigFile(ADUC_ConnectionInfo* info)
     info->authType = ADUC_AuthType_SASToken;
 
     // Optional: The certificate string is needed for Edge Gateway connection.
-    if (ReadDelimitedValueFromFile(
-            ADUC_CONF_FILE_PATH, "edgegateway_cert_path", certificatePath, ARRAY_SIZE(certificatePath)))
+    ADUC_ConfigInfo config = {};
+    if (ADUC_ConfigInfo_Init(&config, ADUC_CONF_FILE_PATH) && config.edgegatewayCertPath != NULL)
     {
-        if (!LoadBufferWithFileContents(certificatePath, certificateString, ARRAY_SIZE(certificateString)))
+        if (!LoadBufferWithFileContents(config.edgegatewayCertPath, certificateString, ARRAY_SIZE(certificateString)))
         {
-            Log_Error("Failed to read the certificate from path: %s", certificatePath);
+            Log_Error("Failed to read the certificate from path: %s", config.edgegatewayCertPath);
             goto done;
         }
 
@@ -657,10 +829,15 @@ _Bool GetConnectionInfoFromADUConfigFile(ADUC_ConnectionInfo* info)
     succeeded = true;
 
 done:
+    ADUC_ConfigInfo_UnInit(&config);
     return succeeded;
 }
 
-#ifdef ADUC_PROVISION_WITH_EIS
+/**
+ * @brief Get the Connection Info from Identity Service
+ *
+ * @return true if connection info can be obtained
+ */
 _Bool GetConnectionInfoFromIdentityService(ADUC_ConnectionInfo* info)
 {
     _Bool succeeded = false;
@@ -691,7 +868,6 @@ done:
 
     return succeeded;
 }
-#endif // ADUC_PROVISION_WITH_EIS
 
 /**
  * @brief Handles the startup of the agent
@@ -704,7 +880,9 @@ _Bool StartupAgent(const ADUC_LaunchArguments* launchArgs)
 {
     _Bool succeeded = false;
 
-    ADUC_ConnectionInfo info = { ADUC_AuthType_NotSet, ADUC_ConnType_NotSet, NULL, NULL, NULL, NULL };
+    ADUC_ConnectionInfo info = {};
+
+    ADUC_ConfigInfo config = {};
 
     if (launchArgs->connectionString != NULL)
     {
@@ -719,6 +897,13 @@ _Bool StartupAgent(const ADUC_LaunchArguments* launchArgs)
         ADUC_ConnectionInfo connInfo = {
             ADUC_AuthType_NotSet, connType, launchArgs->connectionString, NULL, NULL, NULL
         };
+
+        if (!ADUC_SetDiagnosticsDeviceNameFromConnectionString(connInfo.connectionString))
+        {
+            Log_Error("Setting DiagnosticsDeviceName failed");
+            goto done;
+        }
+
         if (!ADUC_DeviceClient_Create(&connInfo, launchArgs))
         {
             Log_Error("ADUC_DeviceClient_Create failed");
@@ -727,22 +912,44 @@ _Bool StartupAgent(const ADUC_LaunchArguments* launchArgs)
     }
     else
     {
-#ifndef ADUC_PROVISION_WITH_EIS
-        if (!GetConnectionInfoFromADUConfigFile(&info))
+        if (!ADUC_ConfigInfo_Init(&config, ADUC_CONF_FILE_PATH))
         {
+            Log_Error("No connnection string set from launch arguments or configuration file");
             goto done;
         }
-#else
-        if (!GetConnectionInfoFromIdentityService(&info))
-        {
-            Log_Info("Failed to get connection information from AIS. Defaulting to configuration file");
 
-            if (!GetConnectionInfoFromADUConfigFile(&info))
+        const ADUC_AgentInfo* agent = ADUC_ConfigInfo_GetAgent(&config, 0);
+        if (agent == NULL)
+        {
+            Log_Error("ADUC_ConfigInfo_GetAgent failed to get the agent information.");
+            goto done;
+        }
+        if (strcmp(agent->connectionType, "AIS") == 0)
+        {
+            if (!GetConnectionInfoFromIdentityService(&info))
+            {
+                Log_Error("Failed to get connection information from AIS.");
+                goto done;
+            }
+        }
+        else if (strcmp(agent->connectionType, "string") == 0)
+        {
+            if (!GetConnectionInfoFromConnectionString(&info, agent->connectionData))
             {
                 goto done;
             }
         }
-#endif
+        else
+        {
+            Log_Error("The connection type %s is not supported", agent->connectionType);
+            goto done;
+        }
+
+        if (!ADUC_SetDiagnosticsDeviceNameFromConnectionString(info.connectionString))
+        {
+            Log_Error("Setting DiagnosticsDeviceName failed");
+            goto done;
+        }
 
         if (!ADUC_DeviceClient_Create(&info, launchArgs))
         {
@@ -751,27 +958,33 @@ _Bool StartupAgent(const ADUC_LaunchArguments* launchArgs)
         }
     }
 
-#ifndef ADUC_PLATFORM_SIMULATOR
+    ADUC_Result result;
+
     // The connection string is valid (IoT hub connection successful) and we are ready for further processing.
     // Send connection string to DO SDK for it to discover the Edge gateway if present.
-    // Don't care about failures since we can't do much here - can't report it and
-    // failing the agent startup is not desirable. Impact of failure can be seen
-    // later when the download fails and we can investigate through logs.
+    if (ConnectionStringUtils_IsNestedEdge(info.connectionString))
     {
-        const int result = deliveryoptimization_set_iot_connection_string(info.connectionString);
-        if (result != 0)
-        {
-            Log_Warn("Failed to pass connection string to DO, error: %d", result);
-        }
+        result = ExtensionManager_InitializeContentDownloader(info.connectionString);
     }
-#endif
+    else
+    {
+        result = ExtensionManager_InitializeContentDownloader(NULL /*initializeData*/);
+    }
+
+    if (IsAducResultCodeFailure(result.ResultCode))
+    {
+        // Since it is nested edge and if DO fails to accept the connection string, then we go ahead and
+        // fail the startup.
+        Log_Error("Failed to set DO connection string in Nested Edge scenario, result: %d", result);
+        goto done;
+    }
 
     succeeded = true;
 
 done:
 
     ADUC_ConnectionInfo_DeAlloc(&info);
-
+    ADUC_ConfigInfo_UnInit(&config);
     return succeeded;
 }
 
@@ -783,7 +996,9 @@ void ShutdownAgent()
     Log_Info("Agent is shutting down with signal %d.", g_shutdownSignal);
     ADUC_PnP_Components_Destroy();
     ADUC_DeviceClient_Destroy(g_iotHubClientHandle);
+    DiagnosticsComponent_DestroyDeviceName();
     ADUC_Logging_Uninit();
+    ExtensionManager_Uninit();
 }
 
 /**
@@ -827,10 +1042,12 @@ void OnRestartSignal(int sig)
  */
 int main(int argc, char** argv)
 {
+    InititalizeModeledComponents();
+
     ADUC_LaunchArguments launchArgs;
 
     int ret = ParseLaunchArguments(argc, argv, &launchArgs);
-    if (ret != 0)
+    if (ret < 0)
     {
         return ret;
     }
@@ -841,11 +1058,47 @@ int main(int argc, char** argv)
         return 0;
     }
 
-    ADUC_Logging_Init(launchArgs.logLevel);
+    ADUC_Logging_Init(launchArgs.logLevel, "du-agent");
 
     if (launchArgs.healthCheckOnly)
     {
         if (HealthCheck(&launchArgs))
+        {
+            return 0;
+        }
+
+        return 1;
+    }
+
+    if (launchArgs.contentHandlerFilePath != NULL)
+    {
+        if (launchArgs.updateType == NULL)
+        {
+            Log_Error("Missing --update-type argument.");
+            return 1;
+        }
+
+        if (RegisterUpdateContentHandler(launchArgs.updateType, launchArgs.contentHandlerFilePath))
+        {
+            return 0;
+        }
+
+        return 1;
+    }
+
+    if (launchArgs.componentEnumeratorFilePath != NULL)
+    {
+        if (RegisterComponentEnumeratorExtension(launchArgs.componentEnumeratorFilePath))
+        {
+            return 0;
+        }
+
+        return 1;
+    }
+
+    if (launchArgs.contentDownloaderFilePath != NULL)
+    {
+        if (RegisterContentDownloaderExtension(launchArgs.contentDownloaderFilePath))
         {
             return 0;
         }
@@ -858,6 +1111,20 @@ int main(int argc, char** argv)
     Log_Info("Git Info: %s", ADUC_GIT_INFO);
 #endif
     Log_Info("Agent built with handlers: %s.", ADUC_CONTENT_HANDLERS);
+
+    _Bool healthy = HealthCheck(&launchArgs);
+    if (launchArgs.healthCheckOnly || !healthy)
+    {
+        if (healthy)
+        {
+            Log_Info("Agent is healthy.");
+        }
+        else
+        {
+            Log_Error("Agent health check failed.");
+        }
+        return healthy ? 0 : 1;
+    }
 
     // Ensure that the ADU data folder exists.
     // Normally, ADUC_DATA_FOLDER is created by install script.

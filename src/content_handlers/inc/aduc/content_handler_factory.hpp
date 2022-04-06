@@ -2,93 +2,38 @@
  * @file content_handler_factory.hpp
  * @brief Definition of the ContentHandlerFactory.
  *
- * @copyright Copyright (c) 2019, Microsoft Corp.
+ * @copyright Copyright (c) Microsoft Corporation.
+ * Licensed under the MIT License.
  */
+
 #ifndef ADUC_CONTENT_HANDLER_FACTORY_HPP
 #define ADUC_CONTENT_HANDLER_FACTORY_HPP
 
+#include "aduc/result.h"
+#include "aduc/logging.h"
+
 #include <memory>
 #include <string>
+#include <unordered_map>
 
+// Forward declaration.
 class ContentHandler;
 
-/**
- * @struct ContentHandlerCreateData
- * @brief Data that needs to be passed to ContentHandlerFactory::Create.
- */
-class ContentHandlerCreateData
+typedef ContentHandler* (*UPDATE_CONTENT_HANDLER_CREATE_PROC)(ADUC_LOG_SEVERITY logLevel);
+
+class ContentHandlerFactory
 {
 public:
-    // Creates an empty ContentHandlerCreateData.
-    // Used to call GetUpdateRebootState when outside of a deployment.
-    ContentHandlerCreateData() = default;
-
-    // Used to call IsInstalled when outside of a deployment.
-    ContentHandlerCreateData(const std::string& fileType) : _fileType(fileType)
-    {
-    }
-
-    ContentHandlerCreateData(
-        const std::string& workFolder,
-        const std::string& logFolder,
-        const std::string& filename,
-        const std::string& fileHash) :
-        _workFolder(workFolder),
-        _logFolder(logFolder), _filename(filename), _fileHash(fileHash)
-    {
-    }
-
-    /**
-     * Ctor for FS-Update
-     * Extra parameter fileType to choose betwenn ff & af during Install pahase
-    */
-    ContentHandlerCreateData(
-        const std::string& workFolder,
-        const std::string& logFolder,
-        const std::string& filename,
-        const std::string& fileHash,
-        const std::string& fileType) :
-        _workFolder(workFolder),
-        _logFolder(logFolder), _filename(filename), _fileHash(fileHash), _fileType(fileType)
-    {
-    }
-
-    const std::string& WorkFolder() const
-    {
-        return _workFolder;
-    }
-    const std::string& LogFolder() const
-    {
-        return _logFolder;
-    }
-    const std::string& Filename() const
-    {
-        return _filename;
-    }
-    const std::string& FileHash() const
-    {
-        return _fileHash;
-    }
-    const std::string& FileType() const
-    {
-        return _fileType;
-    }
+    static ADUC_Result LoadUpdateContentHandlerExtension(const std::string& updateType, ContentHandler** handler);
+    static void UnloadAllUpdateContentHandlers();
+    static void UnloadAllExtensions();
+    static void Uninit();
 
 private:
-    std::string _workFolder;
-    std::string _logFolder;
-    std::string _fileType;
-
-    // TODO(Nox): For now we only support one file.
-    // eventually we will want to support a list of files
-    // with different types.
-    std::string _filename;
-    std::string _fileHash;
+    static ADUC_Result LoadExtensionLibrary(const std::string& updateType, void** libHandle);
+    static std::unordered_map<std::string, void*> _libs;
+    static std::unordered_map<std::string, ContentHandler*> _contentHandlers;
+    static pthread_mutex_t factoryMutex;
 };
-
-namespace ContentHandlerFactory
-{
-std::unique_ptr<ContentHandler> Create(const char* updateType, const ContentHandlerCreateData& data);
-} // namespace ContentHandlerFactory
 
 #endif // ADUC_CONTENT_HANDLER_FACTORY_HPP

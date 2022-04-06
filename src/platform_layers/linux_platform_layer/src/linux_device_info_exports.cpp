@@ -2,7 +2,8 @@
  * @file linux_device_info_exports.cpp
  * @brief DeviceInfo implementation for Linux platform.
  *
- * @copyright Copyright (c) 2019, Microsoft Corporation.
+ * @copyright Copyright (c) Microsoft Corporation.
+ * Licensed under the MIT License.
  */
 #include "aduc/device_info_exports.h"
 
@@ -16,6 +17,7 @@
 #include <sys/sysinfo.h> // sysinfo
 #include <sys/utsname.h> // uname
 
+#include <aduc/config_utils.h>
 #include <aduc/logging.h>
 #include <aduc/string_c_utils.h>
 #include <aduc/string_utils.hpp>
@@ -39,11 +41,11 @@ static char* DeviceInfo_GetManufacturer()
     }
 
     char* result = nullptr;
-    char manufacturer[1024];
 
-    if (ReadDelimitedValueFromFile(ADUC_CONF_FILE_PATH, "manufacturer", manufacturer, ARRAY_SIZE(manufacturer)))
+    ADUC_ConfigInfo config = {};
+    if (ADUC_ConfigInfo_Init(&config, ADUC_CONF_FILE_PATH) && config.manufacturer != nullptr)
     {
-        result = strdup(manufacturer);
+        result = strdup(config.manufacturer);
     }
     else
     {
@@ -52,6 +54,7 @@ static char* DeviceInfo_GetManufacturer()
     }
 
     valueIsDirty = false;
+    ADUC_ConfigInfo_UnInit(&config);
     return result;
 }
 
@@ -72,11 +75,10 @@ static char* DeviceInfo_GetModel()
     }
 
     char* result = nullptr;
-    char model[1024];
-
-    if (ReadDelimitedValueFromFile(ADUC_CONF_FILE_PATH, "model", model, ARRAY_SIZE(model)))
+    ADUC_ConfigInfo config = {};
+    if (ADUC_ConfigInfo_Init(&config, ADUC_CONF_FILE_PATH) && config.model != nullptr)
     {
-        result = strdup(model);
+        result = strdup(config.model);
     }
     else
     {
@@ -85,6 +87,7 @@ static char* DeviceInfo_GetModel()
     }
 
     valueIsDirty = false;
+    ADUC_ConfigInfo_UnInit(&config);
     return result;
 }
 
@@ -294,6 +297,70 @@ static char* DeviceInfo_GetTotalStorage()
     return strdup(buffer.str().c_str());
 }
 
+/**
+ * @brief Get firmware version through F&S Updater.
+ * e.g. 20220322
+ *
+ * @return char* Value of property allocated with malloc, or nullptr on error or value not changed since last call.
+ */
+static char* DeviceInfo_GetFirmwareVersion()
+{
+    std::string firmware_version;
+    const unsigned int kBufferSize = 256;
+    char buffer[kBufferSize] = {0};
+
+    FILE* pipe{ popen(FIRMWARE_VERSION_CHECK_CMD, "r") };
+    if (pipe != nullptr)
+    {
+        while (fgets(buffer, kBufferSize, pipe) != nullptr)
+        {
+            firmware_version += buffer;
+        }
+
+        pclose(pipe);
+    }
+
+    if (firmware_version.empty())
+    {
+        return nullptr;
+    }
+
+    ADUC::StringUtils::Trim(firmware_version);
+    return strdup(firmware_version.c_str());
+}
+
+/**
+ * @brief Get application version through F&S Updater.
+ * e.g. 20220322
+ *
+ * @return char* Value of property allocated with malloc, or nullptr on error or value not changed since last call.
+ */
+static char* DeviceInfo_GetApplicationVersion()
+{
+    std::string application_version;
+    const unsigned int kBufferSize = 256;
+    char buffer[kBufferSize] = {0};
+
+    FILE* pipe{ popen(APPLICATION_VERSION_CHECK_CMD, "r") };
+    if (pipe != nullptr)
+    {
+        while (fgets(buffer, kBufferSize, pipe) != nullptr)
+        {
+            application_version += buffer;
+        }
+
+        pclose(pipe);
+    }
+
+    if (application_version.empty())
+    {
+        return nullptr;
+    }
+
+    ADUC::StringUtils::Trim(application_version);
+    return strdup(application_version.c_str());
+}
+
 //
 // Exported methods
 //
@@ -305,7 +372,6 @@ EXTERN_C_BEGIN
  *
  * @param property Property to retrieve
  * @return char* Value of property allocated with malloc, or nullptr on error or value not changed since last call.
- * Doesn't work at the with the F&S Board at the moment. Because the vendor info is missing from /var/proc
  */
 char* DI_GetDeviceInformationValue(DI_DeviceInfoProperty property)
 {
@@ -319,8 +385,11 @@ char* DI_GetDeviceInformationValue(DI_DeviceInfoProperty property)
             { DIIP_OsName, DeviceInfo_GetOsName },
             { DIIP_SoftwareVersion, DeviceInfo_GetSwVersion },
             { DIIP_ProcessorArchitecture, DeviceInfo_GetProcessorArchitecture },
+            { DIIP_ProcessorManufacturer, DeviceInfo_GetProcessorManufacturer },
             { DIIP_TotalMemory, DeviceInfo_GetTotalMemory },
             { DIIP_TotalStorage, DeviceInfo_GetTotalStorage },
+            { DIIP_FirmwareVersion, DeviceInfo_GetFirmwareVersion },
+            { DIIP_ApplicationVersion, DeviceInfo_GetApplicationVersion },
         };
 
         // Call the handler for the device info property to retrieve current value.
