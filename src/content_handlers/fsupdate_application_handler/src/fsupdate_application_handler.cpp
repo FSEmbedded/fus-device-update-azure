@@ -44,7 +44,7 @@ namespace adushconst = Adu::Shell::Const;
 
 EXTERN_C_BEGIN
 /**
- * @brief Instantiates an Update Content Handler for 'fus/firmware:1' update type.
+ * @brief Instantiates an Update Content Handler for 'fus/application:1' update type.
  */
 ContentHandler* CreateUpdateContentHandlerExtension(ADUC_LOG_SEVERITY logLevel)
 {
@@ -87,7 +87,7 @@ ContentHandler* FSUpdateApplicationHandlerImpl::CreateContentHandler()
     return new FSUpdateApplicationHandlerImpl();
 }
 
-static ADUC_Result HandleFSUpdateRebootState(const char* current_installed_version)
+static ADUC_Result HandleFSUpdateRebootState()
 {
     ADUC_Result result = { ADUC_Result_Failure };
     std::string command = adushconst::adu_shell;
@@ -243,12 +243,12 @@ ADUC_Result FSUpdateApplicationHandlerImpl::Install(const tagADUC_WorkflowData* 
             result = CommitUpdateState();
             if (result.ExtendedResultCode == static_cast<int>(AZURE_COMMIT_STATE::SUCCESSFUL))
             {
-                Log_Info("Commit of failed firmware update.");
+                Log_Info("Commit of failed application update.");
                 result = { ADUC_Result_Failure, ADUC_ERC_FSUPDATE_HANDLER_INSTALL_FAILURE_APPLICATION_UPDATE };
             }
             else
             {
-                Log_Error("Failed to commit missing firmware update.");
+                Log_Error("Failed to commit missing application update.");
                 result = { ADUC_Result_Failure, ADUC_ERC_FSUPDATE_HANDLER_INSTALL_FAILURE_COMMIT_UPDATE };
             }
         }
@@ -274,12 +274,28 @@ done:
  */
 ADUC_Result FSUpdateApplicationHandlerImpl::Apply(const tagADUC_WorkflowData* workflowData)
 {
-    ADUC_Result result = CommitUpdateState();
+    ADUC_Result result = { ADUC_Result_Failure };
+    result = CommitUpdateState();
 
     if (result.ExtendedResultCode == static_cast<int>(AZURE_COMMIT_STATE::SUCCESSFUL))
     {
-        Log_Info("Apply successful.");
-        result = { ADUC_Result_Apply_Success };
+        result  = HandleFSUpdateRebootState();
+
+        if (result.ExtendedResultCode == static_cast<int>(AZURE_UPDATE_REBOOT_STATE::INCOMPLETE_APP_UPDATE))
+        {
+            Log_Info("Incomplete application update; reboot is mandatory");
+            result = { ADUC_Result_Apply_RequiredImmediateReboot };
+        }
+        else if (result.ExtendedResultCode == static_cast<int>(AZURE_UPDATE_REBOOT_STATE::NO_UPDATE_REBOOT_PENDING))
+        {
+            Log_Info("Application update is installed");
+            result = { ADUC_Result_Apply_Success };
+        }
+        else
+        {
+            Log_Error("Unknown error during retrieving current update state.");
+            result = { ADUC_Result_Failure, ADUC_ERC_FSUPDATE_HANDLER_APPLY_FAILURE_UNKNOWN_ERROR };
+        }
     }
     else if (result.ExtendedResultCode == static_cast<int>(AZURE_COMMIT_STATE::UPDATE_NOT_NEEDED))
     {
@@ -318,7 +334,7 @@ ADUC_Result FSUpdateApplicationHandlerImpl::Cancel(const tagADUC_WorkflowData* w
 /**
  * @brief Checks if the installed content matches the installed criteria.
  *
- * @param installedCriteria The installed criteria string. e.g. The firmware version.
+ * @param installedCriteria The installed criteria string. e.g. The application version.
  *  installedCriteria has already been checked to be non-empty before this call.
  *
  * @return ADUC_Result
@@ -352,7 +368,7 @@ ADUC_Result FSUpdateApplicationHandlerImpl::IsInstalled(const tagADUC_WorkflowDa
     if (output.compare(installedCriteria) == 0)
     {
         Log_Info("Expected and installed application version are the same: '%s'", installedCriteria);
-        result = HandleFSUpdateRebootState(installedCriteria);
+        result = HandleFSUpdateRebootState();
 
         if (result.ExtendedResultCode == static_cast<int>(AZURE_UPDATE_REBOOT_STATE::INCOMPLETE_APP_UPDATE))
         {
@@ -377,11 +393,11 @@ ADUC_Result FSUpdateApplicationHandlerImpl::IsInstalled(const tagADUC_WorkflowDa
         goto done;
     }
 
-    result = HandleFSUpdateRebootState(installedCriteria);
+    result = HandleFSUpdateRebootState();
 
     if (result.ExtendedResultCode == static_cast<int>(AZURE_UPDATE_REBOOT_STATE::FAILED_APP_UPDATE))
     {
-        Log_Info("IsInstall based of failed firmware update successful -> commit failed update.");
+        Log_Info("IsInstall based of failed application update successful -> commit failed update.");
         result = CommitUpdateState();
 
         if (result.ExtendedResultCode == static_cast<int>(AZURE_COMMIT_STATE::SUCCESSFUL))

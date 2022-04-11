@@ -87,7 +87,7 @@ ContentHandler* FSUpdateFirmwareHandlerImpl::CreateContentHandler()
     return new FSUpdateFirmwareHandlerImpl();
 }
 
-static ADUC_Result HandleFSUpdateRebootState(const char* current_installed_version)
+static ADUC_Result HandleFSUpdateRebootState()
 {
     ADUC_Result result = { ADUC_Result_Failure };
     std::string command = adushconst::adu_shell;
@@ -278,12 +278,28 @@ done:
  */
 ADUC_Result FSUpdateFirmwareHandlerImpl::Apply(const tagADUC_WorkflowData* workflowData)
 {
-    ADUC_Result result = CommitUpdateState();
+    ADUC_Result result;
+    result  = CommitUpdateState();
 
     if (result.ExtendedResultCode == static_cast<int>(AZURE_COMMIT_STATE::SUCCESSFUL))
     {
-        Log_Info("Apply successful.");
-        result = { ADUC_Result_Apply_Success };
+        result  = HandleFSUpdateRebootState();
+
+        if (result.ExtendedResultCode == static_cast<int>(AZURE_UPDATE_REBOOT_STATE::INCOMPLETE_FW_UPDATE))
+        {
+            Log_Info("Incomplete firmware update; reboot is mandatory");
+            result = { ADUC_Result_Apply_RequiredImmediateReboot };
+        }
+        else if (result.ExtendedResultCode == static_cast<int>(AZURE_UPDATE_REBOOT_STATE::NO_UPDATE_REBOOT_PENDING))
+        {
+            Log_Info("Firmware update is installed");
+            result = { ADUC_Result_Apply_Success };
+        }
+        else
+        {
+            Log_Error("Unknown error during retrieving current update state.");
+            result = { ADUC_Result_Failure, ADUC_ERC_FSUPDATE_HANDLER_APPLY_FAILURE_UNKNOWN_ERROR };
+        }
     }
     else if (result.ExtendedResultCode == static_cast<int>(AZURE_COMMIT_STATE::UPDATE_NOT_NEEDED))
     {
@@ -317,7 +333,6 @@ ADUC_Result FSUpdateFirmwareHandlerImpl::Cancel(const tagADUC_WorkflowData* work
     UNREFERENCED_PARAMETER(workflowData);
     return ADUC_Result{ ADUC_Result_Cancel_UnableToCancel };
 }
-
 
 /**
  * @brief Checks if the installed content matches the installed criteria.
@@ -355,7 +370,7 @@ ADUC_Result FSUpdateFirmwareHandlerImpl::IsInstalled(const tagADUC_WorkflowData*
     output.erase(output.end()-1);
     if (output.compare(installedCriteria) == 0)
     {
-        result = HandleFSUpdateRebootState(installedCriteria);
+        result = HandleFSUpdateRebootState();
 
         if (result.ExtendedResultCode == static_cast<int>(AZURE_UPDATE_REBOOT_STATE::INCOMPLETE_APP_UPDATE))
         {
@@ -380,7 +395,7 @@ ADUC_Result FSUpdateFirmwareHandlerImpl::IsInstalled(const tagADUC_WorkflowData*
         goto done;
     }
 
-    result = HandleFSUpdateRebootState(installedCriteria);
+    result = HandleFSUpdateRebootState();
 
     if (result.ExtendedResultCode == static_cast<int>(AZURE_UPDATE_REBOOT_STATE::FAILED_APP_UPDATE))
     {
