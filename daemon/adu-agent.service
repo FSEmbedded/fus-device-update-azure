@@ -1,7 +1,7 @@
 [Unit]
 Description=Device Update Agent daemon.
-After=network-online.target deliveryoptimization-agent.service adu-agent-setup.service
-Wants=network-online.target deliveryoptimization-agent.service adu-agent-setup.service
+After=network-online.target deliveryoptimization-agent.service adu-agent-setup.service cerst-install.service
+Wants=network-online.target deliveryoptimization-agent.service adu-agent-setup.service cerst-install.service
 
 [Service]
 Type=simple
