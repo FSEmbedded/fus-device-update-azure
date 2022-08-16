@@ -71,6 +71,10 @@ target_link_libraries (
     PRIVATE aziotsharedutil
             IotHubClient::iothub_client
             iothub_client_mqtt_transport
+            iothub_client_mqtt_ws_transport
+            prov_auth_client
+            hsm_security_client
+            utpm
             umqtt
             aduc::adu_core_interface
             aduc::agent_workflow
