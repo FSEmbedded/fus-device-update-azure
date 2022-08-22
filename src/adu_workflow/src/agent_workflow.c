@@ -53,16 +53,16 @@ const char* ADUC_Workflow_CancellationTypeToString(ADUC_WorkflowCancellationType
 {
     switch (cancellationType)
     {
-        case ADUC_WorkflowCancellationType_None:
-            return "None";
-        case ADUC_WorkflowCancellationType_Normal:
-            return "Normal";
-        case ADUC_WorkflowCancellationType_Replacement:
-            return "Replacement";
-        case ADUC_WorkflowCancellationType_Retry:
-            return "Retry";
-        case ADUC_WorkflowCancellationType_ComponentChanged:
-            return "ComponentChanged";
+    case ADUC_WorkflowCancellationType_None:
+        return "None";
+    case ADUC_WorkflowCancellationType_Normal:
+        return "Normal";
+    case ADUC_WorkflowCancellationType_Replacement:
+        return "Replacement";
+    case ADUC_WorkflowCancellationType_Retry:
+        return "Retry";
+    case ADUC_WorkflowCancellationType_ComponentChanged:
+        return "ComponentChanged";
     }
 
     return "<Unknown>";
@@ -277,7 +277,8 @@ void ADUC_Workflow_HandleStartupWorkflowData(ADUC_WorkflowData* currentWorkflowD
 
             ADUC_WorkflowData_SetCurrentAction(desiredAction, currentWorkflowData);
 
-            SetUpdateStateWithResultFunc setUpdateStateWithResultFunc = ADUC_WorkflowData_GetSetUpdateStateWithResultFunc(currentWorkflowData);
+            SetUpdateStateWithResultFunc setUpdateStateWithResultFunc =
+                ADUC_WorkflowData_GetSetUpdateStateWithResultFunc(currentWorkflowData);
             (*setUpdateStateWithResultFunc)(currentWorkflowData, ADUCITF_State_Idle, result);
 
             goto done;
@@ -317,11 +318,13 @@ void ADUC_Workflow_HandleComponentChanged(ADUC_WorkflowData* workflowData)
     // Process the latest goal state, if successfully cached.
     if (workflowData->LastGoalStateJson != NULL)
     {
-        ADUC_Workflow_HandlePropertyUpdate(workflowData, (const unsigned char *) workflowData->LastGoalStateJson, true /* forceDeferral */);
+        ADUC_Workflow_HandlePropertyUpdate(
+            workflowData, (const unsigned char*)workflowData->LastGoalStateJson, true /* forceDeferral */);
     }
     else
     {
-        Log_Error("Component changes is detected, but the update data cache is not available. An update must be trigger by DU service.");
+        Log_Error(
+            "Component changes is detected, but the update data cache is not available. An update must be trigger by DU service.");
     }
 }
 
@@ -366,7 +369,8 @@ void ADUC_Workflow_HandlePropertyUpdate(
                 workflow_get_cancellation_type(currentWorkflowData->WorkflowHandle);
             if (currentCancellationType == ADUC_WorkflowCancellationType_None)
             {
-                workflow_set_cancellation_type(currentWorkflowData->WorkflowHandle, ADUC_WorkflowCancellationType_Normal);
+                workflow_set_cancellation_type(
+                    currentWorkflowData->WorkflowHandle, ADUC_WorkflowCancellationType_Normal);
 
                 // call into handle update action for cancellation logic to invoke ADUC_Workflow_MethodCall_Cancel
                 (*handleUpdateActionFunc)(currentWorkflowData);
@@ -410,7 +414,8 @@ void ADUC_Workflow_HandlePropertyUpdate(
             {
                 // Possible replacement with a new workflow.
                 ADUCITF_State currentState = ADUC_WorkflowData_GetLastReportedState(currentWorkflowData);
-                ADUCITF_WorkflowStep currentWorkflowStep = workflow_get_current_workflowstep(currentWorkflowData->WorkflowHandle);
+                ADUCITF_WorkflowStep currentWorkflowStep =
+                    workflow_get_current_workflowstep(currentWorkflowData->WorkflowHandle);
 
                 if (currentState != ADUCITF_State_Idle && currentState != ADUCITF_State_Failed
                     && currentWorkflowStep != ADUCITF_WorkflowStep_Undefined)
@@ -458,14 +463,14 @@ void ADUC_Workflow_HandlePropertyUpdate(
     else
     {
         // This is a top level workflow, make sure that we set the working folder correctly.
-        workflow_set_workfolder(nextWorkflow,"%s/%s", ADUC_DOWNLOADS_FOLDER, workflow_peek_id(nextWorkflow));
+        workflow_set_workfolder(nextWorkflow, "%s/%s", ADUC_DOWNLOADS_FOLDER, workflow_peek_id(nextWorkflow));
     }
 
     // Continue with the new workflow.
     workflow_free(currentWorkflowData->WorkflowHandle);
     currentWorkflowData->WorkflowHandle = nextWorkflow;
 
-    ADUC_WorkflowData_SaveLastGoalStateJson(currentWorkflowData, (const char*) propertyUpdateValue);
+    ADUC_WorkflowData_SaveLastGoalStateJson(currentWorkflowData, (const char*)propertyUpdateValue);
 
     nextWorkflow = NULL;
 
@@ -523,7 +528,8 @@ void ADUC_Workflow_HandleUpdateAction(ADUC_WorkflowData* workflowData)
     //
 
     ADUC_WorkflowCancellationType cancellationType = workflow_get_cancellation_type(workflowData->WorkflowHandle);
-    Log_Debug("cancellationType(%d) => %s", cancellationType, ADUC_Workflow_CancellationTypeToString(cancellationType));
+    Log_Debug(
+        "cancellationType(%d) => %s", cancellationType, ADUC_Workflow_CancellationTypeToString(cancellationType));
 
     _Bool isReplaceOrRetry = (cancellationType == ADUC_WorkflowCancellationType_Replacement)
         || (cancellationType == ADUC_WorkflowCancellationType_Retry);
@@ -555,13 +561,21 @@ void ADUC_Workflow_HandleUpdateAction(ADUC_WorkflowData* workflowData)
             Log_Info("Cancel received with no operation in progress - returning to Idle state");
             goto done;
         }
-        else {
+        else
+        {
             workflow_set_operation_cancel_requested(workflowData->WorkflowHandle, false);
             workflow_set_cancellation_type(workflowData->WorkflowHandle, ADUC_WorkflowCancellationType_None);
 
             Log_Info("Replace/Retry when operation not in progress. Try to process workflow...");
             // Continue processing workflow below.
         }
+    }
+
+    // Ignore duplicate deployment that can be caused by token expiry connection refresh after about 40 minutes.
+    if (workflow_isequal_id(workflowData->WorkflowHandle, workflowData->LastCompletedWorkflowId))
+    {
+        Log_Debug("Ignoring duplicate deployment %s, action %d", workflowData->LastCompletedWorkflowId, desiredAction);
+        goto done;
     }
 
     //
@@ -978,7 +992,8 @@ static void ADUC_Workflow_SetUpdateStateHelper(
             // Fall through to report Idle without InstalledUpdateId.
         }
 
-        if (!workflowData->ReportStateAndResultAsyncCallback((ADUC_WorkflowDataToken)workflowData, updateState, result, NULL /* installedUpdateId */))
+        if (!workflowData->ReportStateAndResultAsyncCallback(
+                (ADUC_WorkflowDataToken)workflowData, updateState, result, NULL /* installedUpdateId */))
         {
             updateState = ADUCITF_State_Failed;
             workflow_set_state(workflowData->WorkflowHandle, ADUCITF_State_Failed);
@@ -990,7 +1005,8 @@ static void ADUC_Workflow_SetUpdateStateHelper(
     }
     else // Not Idle state
     {
-        if (!workflowData->ReportStateAndResultAsyncCallback((ADUC_WorkflowDataToken)workflowData, updateState, result, NULL /* installedUpdateId */))
+        if (!workflowData->ReportStateAndResultAsyncCallback(
+                (ADUC_WorkflowDataToken)workflowData, updateState, result, NULL /* installedUpdateId */))
         {
             updateState = ADUCITF_State_Failed;
             workflow_set_state(workflowData->WorkflowHandle, ADUCITF_State_Failed);
@@ -1041,12 +1057,17 @@ void ADUC_Workflow_SetInstalledUpdateIdAndGoToIdle(ADUC_WorkflowData* workflowDa
     ADUC_Result idleResult = { .ResultCode = ADUC_Result_Apply_Success, .ExtendedResultCode = 0 };
 
     if (!workflowData->ReportStateAndResultAsyncCallback(
-        (ADUC_WorkflowDataToken)workflowData, ADUCITF_State_Idle, &idleResult, updateId))
+            (ADUC_WorkflowDataToken)workflowData, ADUCITF_State_Idle, &idleResult, updateId))
     {
         Log_Error("Failed to report last installed updateId. Going to idle state.");
     }
 
     ADUC_WorkflowData_SetLastReportedState(ADUCITF_State_Idle, workflowData);
+
+    if (!ADUC_WorkflowData_SetLastCompletedWorkflowId(workflow_peek_id(workflowData->WorkflowHandle), workflowData))
+    {
+        Log_Error("Failed to set last completed workflow id. Going to idle state.");
+    }
 
     ADUC_Workflow_MethodCall_Idle(workflowData);
 
@@ -1068,9 +1089,8 @@ void ADUC_Workflow_MethodCall_Idle(ADUC_WorkflowData* workflowData)
     ADUCITF_State lastReportedState = ADUC_WorkflowData_GetLastReportedState(workflowData);
 
     // Can reach Idle state from ApplyStarted as there isn't an ApplySucceeded state.
-    if (lastReportedState != ADUCITF_State_Idle &&
-        lastReportedState != ADUCITF_State_ApplyStarted &&
-        lastReportedState != ADUCITF_State_Failed)
+    if (lastReportedState != ADUCITF_State_Idle && lastReportedState != ADUCITF_State_ApplyStarted
+        && lastReportedState != ADUCITF_State_Failed)
     {
         // Likely nothing we can do about this, but try setting Idle state again.
         Log_Warn("Idle UpdateAction called in unexpected state: %s!", ADUCITF_StateToString(lastReportedState));
@@ -1156,9 +1176,7 @@ ADUC_Result ADUC_Workflow_MethodCall_Download(ADUC_MethodCall_Data* methodCallDa
 
     if (lastReportedState != ADUCITF_State_DeploymentInProgress)
     {
-        Log_Error(
-            "Download workflow step called in unexpected state: %s!",
-            ADUCITF_StateToString(lastReportedState));
+        Log_Error("Download workflow step called in unexpected state: %s!", ADUCITF_StateToString(lastReportedState));
 
         result.ResultCode = ADUC_Result_Failure;
         result.ExtendedResultCode = ADUC_ERC_UPPERLEVEL_WORKFLOW_UPDATE_ACTION_UNEXPECTED_STATE;
@@ -1237,8 +1255,8 @@ done:
 
 void ADUC_Workflow_MethodCall_Install_Complete(ADUC_MethodCall_Data* methodCallData, ADUC_Result result)
 {
-    if (result.ResultCode == ADUC_Result_Install_RequiredImmediateReboot
-        || result.ResultCode == ADUC_Result_Install_RequiredReboot)
+    if (workflow_is_immediate_reboot_requested(methodCallData->WorkflowData->WorkflowHandle) ||
+        workflow_is_reboot_requested(methodCallData->WorkflowData->WorkflowHandle))
     {
         // If 'install' indicated a reboot required result from apply, go ahead and reboot.
         Log_Info("Install indicated success with RebootRequired - rebooting system now");
@@ -1258,8 +1276,8 @@ void ADUC_Workflow_MethodCall_Install_Complete(ADUC_MethodCall_Data* methodCallD
         }
     }
     else if (
-        result.ResultCode == ADUC_Result_Install_RequiredImmediateAgentRestart
-        || result.ResultCode == ADUC_Result_Install_RequiredAgentRestart)
+        workflow_is_immediate_agent_restart_requested(methodCallData->WorkflowData->WorkflowHandle) ||
+        workflow_is_agent_restart_requested(methodCallData->WorkflowData->WorkflowHandle))
     {
         // If 'install' indicated a restart is required, go ahead and restart the agent.
         Log_Info("Install indicated success with AgentRestartRequired - restarting the agent now");
@@ -1316,8 +1334,8 @@ done:
 
 void ADUC_Workflow_MethodCall_Apply_Complete(ADUC_MethodCall_Data* methodCallData, ADUC_Result result)
 {
-    if (result.ResultCode == ADUC_Result_Apply_RequiredReboot ||
-        result.ResultCode == ADUC_Result_Apply_RequiredImmediateReboot)
+    if (workflow_is_immediate_reboot_requested(methodCallData->WorkflowData->WorkflowHandle) ||
+        workflow_is_reboot_requested(methodCallData->WorkflowData->WorkflowHandle))
     {
         // If apply indicated a reboot required result from apply, go ahead and reboot.
         Log_Info("Apply indicated success with RebootRequired - rebooting system now");
@@ -1336,8 +1354,9 @@ void ADUC_Workflow_MethodCall_Apply_Complete(ADUC_MethodCall_Data* methodCallDat
             workflow_set_operation_in_progress(methodCallData->WorkflowData->WorkflowHandle, false);
         }
     }
-    else if (result.ResultCode == ADUC_Result_Apply_RequiredAgentRestart ||
-        result.ResultCode == ADUC_Result_Apply_RequiredImmediateAgentRestart)
+    else if (
+        workflow_is_immediate_agent_restart_requested(methodCallData->WorkflowData->WorkflowHandle) ||
+        workflow_is_agent_restart_requested(methodCallData->WorkflowData->WorkflowHandle))
     {
         // If apply indicated a restart is required, go ahead and restart the agent.
         Log_Info("Apply indicated success with AgentRestartRequired - restarting the agent now");

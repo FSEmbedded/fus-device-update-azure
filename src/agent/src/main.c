@@ -34,6 +34,7 @@
 #include <iothub_client_options.h>
 #include <iothubtransportmqtt.h>
 #include <limits.h>
+#include <linux/limits.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -160,7 +161,7 @@ typedef struct tagPnPComponentEntry
     const PnPComponentDestroyFunc Destroy;
     const PnPComponentPropertyUpdateCallback
         PnPPropertyUpdateCallback; /**< Called when a component's property is updated. (optional) */
-    
+
     //
     // Following data is dynamic.
     // Must be initialized to NULL in map and remain last entries in this struct.
@@ -546,7 +547,7 @@ static const size_t g_numModeledComponents = ARRAY_SIZE(g_modeledComponents);
 
 static bool g_firstDeviceTwinDataProcessed = false;
 
-static void InititalizeModeledComponents()
+static void InitializeModeledComponents()
 {
     const size_t numModeledComponents = ARRAY_SIZE(g_modeledComponents);
 
@@ -622,28 +623,50 @@ _Bool ADUC_DeviceClient_Create(ADUC_ConnectionInfo* connInfo, const ADUC_LaunchA
     Log_Info("Attempting to create connection to IotHub using type: %s ", ADUC_ConnType_ToString(connInfo->connType));
 
     // Create a connection to IoTHub.
-    if (!ClientHandle_CreateFromConnectionString(
+    if (connInfo->authType == ADUC_AuthType_SASToken)
+    {
+        if (!ClientHandle_CreateFromConnectionString(
             &g_iotHubClientHandle, connInfo->connType, connInfo->connectionString, MQTT_Protocol))
-    {
-        Log_Error("Failure creating IotHub device client using MQTT protocol. Check your connection string.");
-        result = false;
+        {
+            Log_Error("Failure creating IotHub device client using MQTT protocol. Check your connection string.");
+            result = false;
+        }
     }
-    else if (
-        connInfo->x509certificate != NULL
-        && (iothubResult = ClientHandle_SetOption(g_iotHubClientHandle,OPTION_X509_CERT,connInfo->x509certificate) != IOTHUB_CLIENT_OK))
+
+    if (connInfo->authType == ADUC_AuthType_X509)
     {
-        Log_Error("Unable to set certificate string for validation");
-        result = false;
-    }
-    else if (
-        connInfo->x509privatekey != NULL
-        && (iothubResult = ClientHandle_SetOption(g_iotHubClientHandle,OPTION_X509_PRIVATE_KEY,connInfo->x509privatekey) != IOTHUB_CLIENT_OK))
-    {
-        Log_Error("Unable to set private key string for validation");
-        result = false;
+        if (!ClientHandle_Create(&g_iotHubClientHandle, ADUC_ConnType_Device, connInfo->iotHubName, connInfo->device_id, connInfo->iotHubSuffix, MQTT_Protocol))
+        {
+            Log_Error("Could not create instance on certificate");
+            result = false;
+        }
+        else
+        {
+            Log_Info("Succesfull create instance of an handle");
+        }
+
+        if ((iothubResult = ClientHandle_SetOption(g_iotHubClientHandle, OPTION_X509_CERT, connInfo->x509certificate) != IOTHUB_CLIENT_OK))
+        {
+            Log_Error("Unable to set certificate string for validation");
+            result = false;
+        }
+        else
+        {
+            Log_Info("Succesfull set certificate");
+        }
+
+        if ((iothubResult = ClientHandle_SetOption(g_iotHubClientHandle, OPTION_X509_PRIVATE_KEY, connInfo->x509privatekey) != IOTHUB_CLIENT_OK))
+        {
+            Log_Error("Unable to set private key string for validation");
+            result = false;
+        }
+        else
+        {
+            Log_Info("Succesfull set key");
+        }
     }
     // Sets IoTHub tracing verbosity level.
-    else if (
+    if (
         (iothubResult =
              ClientHandle_SetOption(g_iotHubClientHandle, OPTION_LOG_TRACE, &(launchArgs->iotHubTracingEnabled)))
         != IOTHUB_CLIENT_OK)
@@ -804,8 +827,7 @@ _Bool GetConnectionInfoFromConnectionString(ADUC_ConnectionInfo* info, const cha
 
     memset(info, 0, sizeof(*info));
 
-    char certificatePath[1024];
-    char certificateString[8192];
+    char certificateString[8192] = {0};
 
     if (mallocAndStrcpy_s(&info->connectionString, connectionString) != 0)
     {
@@ -824,7 +846,8 @@ _Bool GetConnectionInfoFromConnectionString(ADUC_ConnectionInfo* info, const cha
 
     // Optional: The certificate string is needed for Edge Gateway connection.
     ADUC_ConfigInfo config = {};
-    if (ADUC_ConfigInfo_Init(&config, ADUC_CONF_FILE_PATH) && config.edgegatewayCertPath != NULL)
+    const bool allocated_configuration_info = ADUC_ConfigInfo_Init(&config, ADUC_CONF_FILE_PATH);
+    if ((allocated_configuration_info == true) && (config.edgegatewayCertPath != NULL))
     {
         if (!LoadBufferWithFileContents(config.edgegatewayCertPath, certificateString, ARRAY_SIZE(certificateString)))
         {
@@ -839,48 +862,123 @@ _Bool GetConnectionInfoFromConnectionString(ADUC_ConnectionInfo* info, const cha
         }
 
         info->authType = ADUC_AuthType_NestedEdgeCert;
+        goto success;
+    }
+success:
+    succeeded = true;
+
+done:
+    ADUC_ConfigInfo_UnInit(&config);
+    return succeeded;
+}
+
+
+/**
+ * @brief Get the Connection Info from self-signed x509
+ *
+ * @return true if connection info can be obtained
+ */
+_Bool GetConnectionInfoFromConnectionx509Certificate(ADUC_ConnectionInfo* info, const char* connectionString)
+{
+    _Bool succeeded = false;
+    if (info == NULL)
+    {
+        goto done;
+    }
+    if (connectionString == NULL)
+    {
+        goto done;
     }
 
-    // Optional: self signed X509
-    if (ReadDelimitedValueFromFile(
-            ADUC_X509_CONF_FILE_PATH, "x509_cert_path", certificatePath, ARRAY_SIZE(certificatePath)))
+    memset(info, 0, sizeof(*info));
+
+    if (mallocAndStrcpy_s(&info->connectionString, connectionString) != 0)
     {
-        if (!LoadBufferWithFileContents(certificatePath, certificateString, ARRAY_SIZE(certificateString)))
+        goto done;
+    }
+
+    char fileContentString[1024*10] = {0};
+
+    ADUC_ConfigInfo config = {};
+    const bool allocated_configuration_info = ADUC_ConfigInfo_Init(&config, ADUC_CONF_FILE_PATH);
+
+    if ((allocated_configuration_info == true) &&
+        (config.agents[0].x509_container != NULL) &&
+        (strcmp(config.agents[0].x509_container, "") > 0) &&
+        (config.agents[0].x509_cert != NULL) &&
+        (strcmp(config.agents[0].x509_cert, "") > 0) &&
+        (config.agents[0].x509_key != NULL) &&
+        (strcmp(config.agents[0].x509_key, "") > 0) &&
+        (strcmp(config.agents[0].iotHubName, "") > 0) &&
+        (strcmp(config.agents[0].iotHubSuffix, "") > 0) &&
+        (strcmp(config.agents[0].device_id, "") > 0)
+    )
+    {
+        char x509_cert_path[PATH_MAX] = {0};
+        char x509_key_path[PATH_MAX] = {0};
+
+        strncpy(x509_cert_path, config.agents[0].x509_container, PATH_MAX - 1);
+        if (x509_cert_path[strlen(x509_cert_path)] != '/')
         {
-            Log_Error("Failed to read the certificate from path: %s", certificatePath);
+            strncat(x509_cert_path, "/", PATH_MAX - strlen(x509_cert_path) - 1);
+        }
+        strncat(x509_cert_path, config.agents[0].x509_cert, PATH_MAX - strlen(x509_cert_path) - 1);
+
+        strncpy(x509_key_path, config.agents[0].x509_container, PATH_MAX - 1);
+        if (x509_key_path[strlen(x509_key_path)] != '/')
+        {
+            strncat(x509_key_path, "/", PATH_MAX - strlen(x509_cert_path) - 1);
+        }
+        strncat(x509_key_path, config.agents[0].x509_key, PATH_MAX - strlen(x509_key_path) - 1);
+
+        if (!LoadBufferWithFileContents(x509_cert_path, fileContentString, ARRAY_SIZE(fileContentString)))
+        {
+            Log_Error("Failed to read the certificate from path: %s", x509_cert_path);
             goto done;
         }
 
-        if (mallocAndStrcpy_s(&info->x509certificate, certificateString) != 0)
+        if (mallocAndStrcpy_s(&info->x509certificate, fileContentString) != 0)
         {
             Log_Error("Failed to copy certificate string.");
             goto done;
         }
 
-        if (ReadDelimitedValueFromFile(
-                ADUC_X509_CONF_FILE_PATH, "x509_key_path", certificatePath, ARRAY_SIZE(certificatePath)))
+        if (!LoadBufferWithFileContents(x509_key_path, fileContentString, ARRAY_SIZE(fileContentString)))
         {
-            if (!LoadBufferWithFileContents(certificatePath, certificateString, ARRAY_SIZE(certificateString)))
-            {
-                Log_Error("Failed to read the private key from path: %s", certificatePath);
-                goto done;
-            }
-
-            if (mallocAndStrcpy_s(&info->x509privatekey, certificateString) != 0)
-            {
-                Log_Error("Failed to copy private key string.");
-                goto done;
-            }
+            Log_Error("Failed to read the key from path: %s", x509_key_path);
+            goto done;
         }
 
-        //Log_Info("###GetConnectionInfoFromADUConfigFile\n");
-        //Log_Info("###certificateString: %s", certificateString);
-        //Log_Info("###x509certificate: %s", info->x509certificate);
-        //Log_Info("###x509privatekey: %s", info->x509privatekey);
-        //info->authType = ADUC_AuthType_NestedEdgeCert;
+        if (mallocAndStrcpy_s(&info->x509privatekey, fileContentString) != 0)
+        {
+            Log_Error("Failed to copy certificate string.");
+            goto done;
+        }
+
+        if((info->device_id = strdup(config.agents[0].device_id)) == NULL)
+        {
+            Log_Error("Could not allocate memory for \"device_id\"");
+            goto done;
+        }
+
+        if((info->iotHubName = strdup(config.agents[0].iotHubName)) == NULL)
+        {
+            Log_Error("Could not allocate memory for \"iotHubName\"");
+            goto done;
+        }
+
+        if((info->iotHubSuffix = strdup(config.agents[0].iotHubSuffix)) == NULL)
+        {
+            Log_Error("Could not allocate memory for \"iotHubSuffix\"");
+            goto done;
+        }
+
         info->authType = ADUC_AuthType_X509;
+        info->connType = ADUC_ConnType_Device;
+        goto success;
     }
 
+success:
     succeeded = true;
 
 done:
@@ -994,16 +1092,27 @@ _Bool StartupAgent(const ADUC_LaunchArguments* launchArgs)
                 goto done;
             }
         }
+        else if (strcmp(agent->connectionType, "x509") == 0)
+        {
+            Log_Info("Use x509 certificate");
+            if (!GetConnectionInfoFromConnectionx509Certificate(&info, agent->connectionData))
+            {
+                goto done;
+            }
+        }
         else
         {
             Log_Error("The connection type %s is not supported", agent->connectionType);
             goto done;
         }
 
-        if (!ADUC_SetDiagnosticsDeviceNameFromConnectionString(info.connectionString))
+        if (strcmp(agent->connectionType, "x509") != 0)
         {
-            Log_Error("Setting DiagnosticsDeviceName failed");
-            goto done;
+            if (!ADUC_SetDiagnosticsDeviceNameFromConnectionString(info.connectionString))
+            {
+                Log_Error("Setting DiagnosticsDeviceName failed");
+                goto done;
+            }
         }
 
         if (!ADUC_DeviceClient_Create(&info, launchArgs))
@@ -1097,7 +1206,7 @@ void OnRestartSignal(int sig)
  */
 int main(int argc, char** argv)
 {
-    InititalizeModeledComponents();
+    InitializeModeledComponents();
 
     ADUC_LaunchArguments launchArgs;
 

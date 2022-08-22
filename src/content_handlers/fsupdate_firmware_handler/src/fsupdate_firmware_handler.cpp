@@ -92,11 +92,11 @@ static ADUC_Result HandleFSUpdateRebootState()
     ADUC_Result result = { ADUC_Result_Failure };
     std::string command = adushconst::adu_shell;
     std::vector<std::string> args{ adushconst::update_type_opt,
-                                adushconst::update_type_fus_firmware,
-                                adushconst::update_action_opt,
-                                adushconst::update_action_execute,
-                                adushconst::target_options_opt,
-                                "update_state" };
+                                   adushconst::update_type_fus_firmware,
+                                   adushconst::update_action_opt,
+                                   adushconst::update_action_execute,
+                                   adushconst::target_options_opt,
+                                   "update_state" };
 
     Log_Info("Verify current_update_state");
 

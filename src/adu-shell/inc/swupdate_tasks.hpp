@@ -1,8 +1,8 @@
 /**
- * @file fsupdate_tasks.hpp
- * @brief Implements functions related to fus/fsupdate update type.
+ * @file swupdate_tasks.hpp
+ * @brief Implements functions related to microsoft/swupdate update type.
  *
- * @copyright Copyright (c) F&S Systeme Elektronik GmbH.
+ * @copyright Copyright (c) Microsoft Corporation.
  * Licensed under the MIT License.
  */
 #ifndef ADU_SHELL_SWUPDATE_TASKS_HPP

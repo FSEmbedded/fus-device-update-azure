@@ -31,6 +31,12 @@ static void ADUC_AgentInfo_Free(ADUC_AgentInfo* agent);
  * @param connectionData connectionData for @p agent
  * @param manufacturer manufacturer for @p agent
  * @param model connectionData for @p agent
+ * @param x509_container path for x509 credentials @p agent
+ * @param x509_cert name of certificate file @p agent
+ * @param x509_key name of key file @p agent
+ * @param device_id id of the device @p agent
+ * @param iotHubName Name of the IoT-Hub instance @p agent
+ * @param iotHubSuffix Suffix (URI) of the IoT-Hub instance @p agent
  * @returns True on success and false on failure
  */
 static _Bool ADUC_AgentInfo_Init(ADUC_AgentInfo* agent, const JSON_Object* agent_obj)
@@ -52,43 +58,136 @@ static _Bool ADUC_AgentInfo_Init(ADUC_AgentInfo* agent, const JSON_Object* agent
     JSON_Object* connection_source = json_object_get_object(agent_obj, "connectionSource");
     const char* connection_type = json_object_get_string(connection_source, "connectionType");
     const char* connection_data = json_object_get_string(connection_source, "connectionData");
+    const char* x509_container = json_object_get_string(connection_source, "x509_container");
+    const char* x509_cert = json_object_get_string(connection_source, "x509_cert");
+    const char* x509_key = json_object_get_string(connection_source, "x509_key");
+    const char* device_id = json_object_get_string(connection_source, "device_id");
+    const char* iotHubName = json_object_get_string(connection_source, "iotHubName");
+    const char* iotHubSuffix = json_object_get_string(connection_source, "iotHubSuffix");
 
     // As these fields are mandatory, if any of the fields doesn't exist, the agent will fail to be constructed.
-    if (name == NULL || runas == NULL || connection_type == NULL || connection_data == NULL || manufacturer == NULL || model == NULL)
+    if (name == NULL)
     {
+        Log_Error("The field \"name\" is not defined");
+        goto done;
+    }
+
+    if (runas == NULL)
+    {
+        Log_Error("The field \"runas\" is not defined");
+        goto done;
+    }
+
+    if (connection_type == NULL)
+    {
+        Log_Error("The field \"connection_type\" is not defined");
+        goto done;
+    }
+
+    if (manufacturer == NULL)
+    {
+        Log_Error("The field \"manufacturer\" is not defined");
+        goto done;
+    }
+
+    if (model == NULL)
+    {
+        Log_Error("The field \"model\" is not defined");
+        goto done;
+    }
+
+    if ((x509_container != NULL) || (x509_cert != NULL) || (x509_key != NULL) || (device_id != NULL) || (iotHubName != NULL) || (iotHubSuffix != NULL))
+    {
+        if ((x509_container == NULL) || (x509_cert == NULL) || (x509_key == NULL) || (device_id == NULL) || (iotHubName == NULL) || (iotHubSuffix == NULL))
+        {
+            Log_Error("Not all fields of the x509 certificates are defined");
+            goto done;
+        }
+    }
+    else if (connection_data == NULL)
+    {
+        Log_Error("The field \"connection_data\" is not defined");
         goto done;
     }
 
     if (mallocAndStrcpy_s(&(agent->name), name) != 0)
     {
+        Log_Error("The content of field \"name\" could not be copied");
         goto done;
     }
 
     if (mallocAndStrcpy_s(&(agent->runas), runas) != 0)
     {
+        Log_Error("The content of field \"runas\" could not be copied");
         goto done;
     }
+
 
     if (mallocAndStrcpy_s(&(agent->connectionType), connection_type) != 0)
     {
+        Log_Error("The content of field \"connection_type\" could not be copied");
         goto done;
     }
 
-    if (mallocAndStrcpy_s(&(agent->connectionData), connection_data) != 0)
+    if (connection_data != NULL)
     {
-        goto done;
+        if (mallocAndStrcpy_s(&(agent->connectionData), connection_data) != 0)
+        {
+            Log_Error("The content of field \"connection_data\" could not be copied");
+            goto done;
+        }
     }
 
     if (mallocAndStrcpy_s(&(agent->manufacturer), manufacturer) != 0)
     {
+        Log_Error("The content of field \"manufacturer\" could not be copied");
         goto done;
     }
 
     if (mallocAndStrcpy_s(&(agent->model), model) != 0)
     {
+        Log_Error("The content of field \"model\" could not be copied");
         goto done;
     }
 
+    if (x509_container != NULL)
+    {
+        if (mallocAndStrcpy_s(&(agent->x509_container), x509_container) != 0)
+        {
+            Log_Error("The content of field \"x509_container\" could not be copied");
+            goto done;
+        }
+
+        if (mallocAndStrcpy_s(&(agent->x509_cert), x509_cert) != 0)
+        {
+            Log_Error("The content of field \"x509_cert\" could not be copied");
+            goto done;
+        }
+
+        if (mallocAndStrcpy_s(&(agent->x509_key), x509_key) != 0)
+        {
+            Log_Error("The content of field \"x509_key\" could not be copied");
+            goto done;
+        }
+
+        if (mallocAndStrcpy_s(&(agent->device_id), device_id) != 0)
+        {
+            Log_Error("The content of field \"device_id\" could not be copied");
+            goto done;
+        }
+
+        if (mallocAndStrcpy_s(&(agent->iotHubName), iotHubName) != 0)
+        {
+            Log_Error("The content of field \"iotHubName\" could not be copied");
+            goto done;
+        }
+
+        if (mallocAndStrcpy_s(&(agent->iotHubSuffix), iotHubSuffix) != 0)
+        {
+            Log_Error("The content of field \"iotHubSuffix\" could not be copied");
+            goto done;
+        }
+    }
     success = true;
 done:
 
@@ -125,6 +224,24 @@ static void ADUC_AgentInfo_Free(ADUC_AgentInfo* agent)
 
     free(agent->model);
     agent->model = NULL;
+
+    free(agent->x509_container);
+    agent->x509_container = NULL;
+
+    free(agent->x509_cert);
+    agent->x509_cert = NULL;
+
+    free(agent->x509_key);
+    agent->x509_key = NULL;
+
+    free(agent->device_id);
+    agent->device_id = NULL;
+
+    free(agent->iotHubName);
+    agent->iotHubName = NULL;
+
+    free(agent->iotHubSuffix);
+    agent->iotHubSuffix = NULL;
 }
 
 /**

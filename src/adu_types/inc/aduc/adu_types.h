@@ -62,6 +62,9 @@ typedef struct tagConnectionInfo
     char* opensslPrivateKey; /**< x509 private key in PEM format for the IoTHubClient to be used for authentication */
     char* x509certificate;
     char* x509privatekey;
+    char* device_id;
+    char* iotHubName;
+    char* iotHubSuffix;
 } ADUC_ConnectionInfo;
 
 /**

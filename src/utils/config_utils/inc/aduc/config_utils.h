@@ -35,13 +35,25 @@ typedef struct tagADUC_AgentInfo
 
     char* runas; /**< Run as a trusted user. */
 
-    char* connectionType; /**< It can be either AIS or string. */
+    char* connectionType; /**< It can be either AIS, string or x509. */
 
     char* connectionData; /**< the name in AIS principal (AIS); or the connectionString (conncetionType string). */
 
     char* manufacturer; /**< Device property manufacturer. */
 
     char* model; /**< Device property model. */
+
+    char* x509_container; /**< Where to search for the x509 credentials. */
+
+    char* x509_cert; /**< How the certificate for the x509 secured encrypted connection is named. */
+
+    char* x509_key; /**< How the key for the x509 certificate is named to secure the connection. */
+
+    char* device_id; /**< Device ID of th device thast should communicate. */
+
+    char* iotHubName; /**< The name of the used IoT-Hub. */
+
+    char* iotHubSuffix; /**< The URI-suffix of the used IoT-Hub. */
 
 } ADUC_AgentInfo;
 

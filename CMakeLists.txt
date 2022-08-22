@@ -47,7 +47,7 @@ set_cache_with_env_or_default (
 
 set_cache_with_env_or_default (
     ADUC_VERSION_PATCH
-    "0"
+    "1"
     STRING
     "The patch part of the semantic version")
 
@@ -95,19 +95,9 @@ set (
     CACHE STRING "Path to the configuration folder for the ADU Agent.")
 
 set (
-    ADUC_X509_CONF_FOLDER
-    "/etc/adu"
-    CACHE STRING "Path to the configuration folder for the ADU Agent X509 certificates.")
-
-set (
     ADUC_CONF_FILE
     "du-config.json"
     CACHE STRING "Name of the ADU Agent configuration file.")
-
-set (
-    ADUC_X509_CONF_FILE
-    "adu-conf.txt"
-    CACHE STRING "Name of the ADU Agent X509 configuration file.")
 
 set (
     ADUC_DATA_FOLDER
@@ -339,6 +329,7 @@ option (ADUC_BUILD_UNIT_TESTS "Build unit tests and mock some functionality" OFF
 option (ADUC_BUILD_DOCUMENTATION "Build documentation files" OFF)
 option (ADUC_BUILD_PACKAGES "Build the ADU Agent packages" OFF)
 option (ADUC_INSTALL_DAEMON "Install the ADU Agent as a daemon" ON)
+option (ADUC_REGISTER_DAEMON "Register the ADU Agent daemon with the system" ON)
 
 ### End CMake Options
 
@@ -352,17 +343,6 @@ set (
     ADUC_CONF_FILE_PATH
     "${ADUC_CONF_FILE_PATH}"
     CACHE STRING "Path to the ADU configuration file.")
-
-# Construct the absolute path to the x509 adu configuration file.
-get_filename_component (
-    ADUC_X509_CONF_FILE_PATH
-    "${ADUC_X509_CONF_FOLDER}/${ADUC_X509_CONF_FILE}"
-    ABSOLUTE
-    "/")
-set (
-    ADUC_X509_CONF_FILE_PATH
-    "${ADUC_X509_CONF_FILE_PATH}"
-    CACHE STRING "Path to the ADU X509 configuration file.")
 
 # Construct the absolute path to the adu diagnostics configuration file
 get_filename_component (
