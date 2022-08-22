@@ -34,7 +34,6 @@
 #include <iothub_client_options.h>
 #include <iothubtransportmqtt.h>
 #include <limits.h>
-#include <linux/limits.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>

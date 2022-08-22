@@ -81,8 +81,11 @@ _Bool ClientHandle_CreateFromConnectionString(
     }
     else if (type == ADUC_ConnType_Module)
     {
-        Log_Error("ClientHandle_CreateFromConnectionString do not support module instance");
-        return false;
+        IOTHUB_MODULE_CLIENT_LL_HANDLE moduleHandle =
+            IoTHubModuleClient_LL_CreateFromConnectionString(connectionString, protocol);
+
+        *iotHubClientHandle = (ADUC_ClientHandle)moduleHandle;
+        goto done;
     }
     else
     {

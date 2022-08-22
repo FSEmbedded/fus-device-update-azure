@@ -227,6 +227,7 @@ typedef enum tagADUC_ResultCode
     ADUC_Result_IsInstalled_Installed = 900,     /**< Succeeded and content is installed. */
     ADUC_Result_IsInstalled_NotInstalled = 901,  /**< Succeeded and content is not installed */
     ADUC_Result_IsInstalled_MissingCommit = 902
+
 } ADUC_ResultCode;
 
 #define AducResultCodeIndicatesInProgress(resultCode)                                                \
