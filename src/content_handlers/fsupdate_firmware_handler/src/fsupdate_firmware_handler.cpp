@@ -259,8 +259,7 @@ ADUC_Result FSUpdateFirmwareHandlerImpl::Install(const tagADUC_WorkflowData* wor
     }
 
     Log_Info("Install succeeded");
-    // Always require a reboot after successful install
-    result = { ADUC_Result_Install_RequiredImmediateReboot };
+    result = { ADUC_Result_Install_Success };
 
 done:
     workflow_free_string(workFolder);
@@ -288,6 +287,7 @@ ADUC_Result FSUpdateFirmwareHandlerImpl::Apply(const tagADUC_WorkflowData* workf
         if (result.ExtendedResultCode == static_cast<int>(AZURE_UPDATE_REBOOT_STATE::INCOMPLETE_FW_UPDATE))
         {
             Log_Info("Incomplete firmware update; reboot is mandatory");
+            workflow_request_immediate_reboot(workflowData->WorkflowHandle);
             result = { ADUC_Result_Apply_RequiredImmediateReboot };
         }
         else if (result.ExtendedResultCode == static_cast<int>(AZURE_UPDATE_REBOOT_STATE::NO_UPDATE_REBOOT_PENDING))

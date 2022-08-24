@@ -255,8 +255,7 @@ ADUC_Result FSUpdateApplicationHandlerImpl::Install(const tagADUC_WorkflowData* 
     }
 
     Log_Info("Install succeeded");
-    // Always require a reboot after successful install
-    result = { ADUC_Result_Install_RequiredImmediateReboot };
+    result = { ADUC_Result_Install_Success};
 
 done:
     workflow_free_string(workFolder);
@@ -284,6 +283,7 @@ ADUC_Result FSUpdateApplicationHandlerImpl::Apply(const tagADUC_WorkflowData* wo
         if (result.ExtendedResultCode == static_cast<int>(AZURE_UPDATE_REBOOT_STATE::INCOMPLETE_APP_UPDATE))
         {
             Log_Info("Incomplete application update; reboot is mandatory");
+            workflow_request_immediate_reboot(workflowData->WorkflowHandle);
             result = { ADUC_Result_Apply_RequiredImmediateReboot };
         }
         else if (result.ExtendedResultCode == static_cast<int>(AZURE_UPDATE_REBOOT_STATE::NO_UPDATE_REBOOT_PENDING))
