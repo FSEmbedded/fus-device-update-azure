@@ -65,7 +65,7 @@ ADUShellTaskResult CommitUpdate(const ADUShell_LaunchArguments& launchArgs)
 
     std::vector<std::string> args;
 
-    args.emplace_back("--commit_update");
+    args.emplace_back(fsazure_option_commit_update);
 
     taskResult.SetExitStatus(ADUC_LaunchChildProcess(fsazure_command, args, taskResult.Output()));
 
