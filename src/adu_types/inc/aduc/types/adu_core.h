@@ -223,6 +223,7 @@ typedef enum tagADUC_ResultCode
 
     ADUC_Result_Cancel_Success = 800,            /**< Succeeded. */
     ADUC_Result_Cancel_UnableToCancel = 801,     /**< Not a failure. Cancel is best effort. */
+    ADUC_Result_Cancel_RequiredImmediateReboot = 802,     /**< Need reboot */
 
     ADUC_Result_IsInstalled_Installed = 900,     /**< Succeeded and content is installed. */
     ADUC_Result_IsInstalled_NotInstalled = 901,  /**< Succeeded and content is not installed */

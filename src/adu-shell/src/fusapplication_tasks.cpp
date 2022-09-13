@@ -29,7 +29,7 @@ const char* fsazure_command = "fs-azure";
 const char* fsazure_option_install = "--application_file";
 const char* fsazure_option_commit_update = "--commit_update";
 const char* fsazure_option_get_update_state = "--update_reboot_state";
-
+const char* fsazure_option_rollback_application = "--rollback_application";
 /**
  * @brief Runs "fs-azure --application_file <path>" command in  a child process.
  *
@@ -108,6 +108,27 @@ ADUShellTaskResult Execute(const ADUShell_LaunchArguments& launchArgs)
 }
 
 /**
+* @brief Runs "fs-azure [--rollback_application]" command in  a child process.
+*
+* @param launchArgs An adu-shell launch arguments.
+* @return A result from child process.
+*/
+ADUShellTaskResult Cancel(const ADUShell_LaunchArguments& launchArgs)
+{
+    ADUShellTaskResult taskResult;
+
+    Log_Info("Rollback application install");
+
+    std::vector<std::string> args;
+
+    args.emplace_back(fsazure_option_rollback_application);
+
+    taskResult.SetExitStatus(ADUC_LaunchChildProcess(fsazure_command, args, taskResult.Output()));
+
+    return taskResult;
+}
+
+/**
  * @brief Runs appropriate command based on an action and other arguments in launchArgs.
  *
  * This could resulted in one or more packaged installed or removed from the system.
@@ -128,6 +149,7 @@ ADUShellTaskResult DoFUSApplicationUpdateTask(const ADUShell_LaunchArguments& la
             { ADUShellAction::Install, Install },
             { ADUShellAction::Execute, Execute },
             { ADUShellAction::Apply, CommitUpdate },
+            { ADUShellAction::Cancel, Cancel },
             { ADUShellAction::Reboot, Adu::Shell::Tasks::Common::Reboot }
         };
 

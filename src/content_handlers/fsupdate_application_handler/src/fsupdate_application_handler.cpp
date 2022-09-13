@@ -291,6 +291,12 @@ ADUC_Result FSUpdateApplicationHandlerImpl::Apply(const tagADUC_WorkflowData* wo
             Log_Info("Application update is installed");
             result = { ADUC_Result_Apply_Success };
         }
+        else if (result.ExtendedResultCode == static_cast<int>(AZURE_UPDATE_REBOOT_STATE::ROLLBACK_APP_REBOOT_PENDING))
+        {
+            Log_Info("Incomplete application rollback; need reboot");
+            workflow_request_immediate_reboot(workflowData->WorkflowHandle);
+            result = { ADUC_Result_Apply_RequiredImmediateReboot };
+        }
         else
         {
             Log_Error("Unknown error during retrieving current update state.");
@@ -326,8 +332,79 @@ ADUC_Result FSUpdateApplicationHandlerImpl::Apply(const tagADUC_WorkflowData* wo
  */
 ADUC_Result FSUpdateApplicationHandlerImpl::Cancel(const tagADUC_WorkflowData* workflowData)
 {
-    UNREFERENCED_PARAMETER(workflowData);
-    return ADUC_Result{ ADUC_Result_Cancel_Success };
+    ADUC_Result result = { ADUC_Result_Failure };
+
+    result  = HandleFSUpdateRebootState();
+    if (result.ExtendedResultCode == static_cast<int>(AZURE_UPDATE_REBOOT_STATE::INCOMPLETE_APP_UPDATE))
+    {
+        Log_Info("Incomplete application update -> proceed rollback");
+
+        std::string command = adushconst::adu_shell;
+        std::vector<std::string> args{ adushconst::update_type_opt,
+                                    adushconst::update_type_fus_application,
+                                    adushconst::update_action_opt,
+                                    adushconst::update_action_cancel };
+
+        std::string output;
+
+        result.ExtendedResultCode = ADUC_LaunchChildProcess(command, args, output);
+
+        if (result.ExtendedResultCode != static_cast<int>(AZURE_APPLICATION_STATE::ROLLBACK_SUCCESSFUL))
+        {
+            std::string error_msg = "Rollback application failed: ";
+            error_msg += std::to_string(result.ExtendedResultCode);
+            Log_Error(error_msg.c_str());
+
+            result = { ADUC_Result_Failure, ADUC_ERC_FSUPDATE_HANDLER_CANCEL_ROLLBACK_APPLICATION_ERROR };
+            return result;
+        }
+
+        result  = HandleFSUpdateRebootState();
+        if (result.ExtendedResultCode == static_cast<int>(AZURE_UPDATE_REBOOT_STATE::ROLLBACK_APP_REBOOT_PENDING))
+        {
+            Log_Info("Incomplete application rollback update -> proceed reboot");
+            workflow_request_immediate_reboot(workflowData->WorkflowHandle);
+            result = { ADUC_Result_Cancel_RequiredImmediateReboot };
+        }
+        else if (result.ExtendedResultCode == static_cast<int>(AZURE_UPDATE_REBOOT_STATE::NO_UPDATE_REBOOT_PENDING))
+        {
+            Log_Info("Complete application rollback update");
+            result = { ADUC_Result_Cancel_Success };
+        }
+        else
+        {
+            Log_Error("No permitted rollback state");
+            result = { ADUC_Result_Failure, ADUC_ERC_FSUPDATE_HANDLER_CANCEL_NOT_ALLOWED_STATE_ERROR };
+        }
+
+    }
+    else if (result.ExtendedResultCode == static_cast<int>(AZURE_UPDATE_REBOOT_STATE::ROLLBACK_APP_REBOOT_PENDING))
+    {
+        Log_Info("Incomplete application rollback update -> reboot processed");
+        result = CommitUpdateState();
+
+        if (result.ExtendedResultCode == static_cast<int>(AZURE_UPDATE_REBOOT_STATE::NO_UPDATE_REBOOT_PENDING))
+        {
+            Log_Info("Reboot of application update processed -> commited");
+            result = { ADUC_Result_Cancel_Success };
+        }
+        else
+        {
+            Log_Error("Reboot of cancelled application not successed processed");
+            result = { ADUC_Result_Cancel_Success, ADUC_ERC_FSUPDATE_HANDLER_CANCEL_NOT_ALLOWED_STATE_ERROR };
+        }
+    }
+    else if (result.ExtendedResultCode == static_cast<int>(AZURE_UPDATE_REBOOT_STATE::NO_UPDATE_REBOOT_PENDING))
+    {
+        Log_Info("No cancel is possible update already installed");
+        result = { ADUC_Result_Failure_Cancelled };
+    }
+    else
+    {
+        Log_Error("Unknown error during retrieving current update state.");
+        result = { ADUC_Result_Failure, ADUC_ERC_FSUPDATE_HANDLER_CANCEL_NOT_ALLOWED_STATE_ERROR };
+    }
+    return result;
 }
 
 
