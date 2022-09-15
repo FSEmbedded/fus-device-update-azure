@@ -43,6 +43,14 @@ ADUShellTaskResult CommitUpdate(const ADUShell_LaunchArguments& launchArgs);
 ADUShellTaskResult Execute(const ADUShell_LaunchArguments& launchArgs);
 
 /**
+* @brief Runs "fs-azure [--rollback_firmware]" command in  a child process.
+*
+* @param launchArgs An adu-shell launch arguments.
+* @return A result from child process.
+*/
+ADUShellTaskResult Cancel(const ADUShell_LaunchArguments& launchArgs);
+
+/**
  * @brief Runs appropriate command based on an action and other arguments in launchArgs.
  *
  * @param launchArgs An adu-shell launch arguments.

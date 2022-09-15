@@ -29,6 +29,7 @@ const char* fsazure_command = "fs-azure";
 const char* fsazure_option_firmware_install = "--firmware_file";
 const char* fsazure_option_commit_update = "--commit_update";
 const char* fsazure_option_get_update_state = "--update_reboot_state";
+const char* fsazure_option_rollback_firmware = "--rollback_firmware";
 
 /**
  * @brief Runs "fs-azure --firmware_file <path>" command in  a child process.
@@ -66,6 +67,27 @@ ADUShellTaskResult CommitUpdate(const ADUShell_LaunchArguments& launchArgs)
     std::vector<std::string> args;
 
     args.emplace_back(fsazure_option_commit_update);
+
+    taskResult.SetExitStatus(ADUC_LaunchChildProcess(fsazure_command, args, taskResult.Output()));
+
+    return taskResult;
+}
+
+/**
+* @brief Runs "fs-azure [--rollback_firmware]" command in  a child process.
+*
+* @param launchArgs An adu-shell launch arguments.
+* @return A result from child process.
+*/
+ADUShellTaskResult Cancel(const ADUShell_LaunchArguments& launchArgs)
+{
+    ADUShellTaskResult taskResult;
+
+    Log_Info("Rollback firmware install");
+
+    std::vector<std::string> args;
+
+    args.emplace_back(fsazure_option_rollback_firmware);
 
     taskResult.SetExitStatus(ADUC_LaunchChildProcess(fsazure_command, args, taskResult.Output()));
 
@@ -128,6 +150,7 @@ ADUShellTaskResult DoFUSFirmwareUpdateTask(const ADUShell_LaunchArguments& launc
             { ADUShellAction::Install, Install },
             { ADUShellAction::Execute, Execute },
             { ADUShellAction::Apply, CommitUpdate },
+            { ADUShellAction::Cancel, Cancel },
             { ADUShellAction::Reboot, Adu::Shell::Tasks::Common::Reboot }
         };
 
