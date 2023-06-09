@@ -53,7 +53,7 @@ _Bool GetConnectionInfoFromConnectionString(ADUC_ConnectionInfo* info, const cha
  *
  * @return true if connection info can be obtained
  */
-_Bool GetConnectionInfoFromConnectionx509Certificate(ADUC_ConnectionInfo* info);
+_Bool GetConnectionInfoFromConnectionx509Certificate(ADUC_ConnectionInfo* info, const char* connectionString);
 
 /**
  * @brief Checks whether we can obtain a device or module connection string.
@@ -88,7 +88,7 @@ _Bool IsConnectionInfoValid(const ADUC_LaunchArguments* launchArgs, ADUC_ConfigI
     }
     else if (strcmp(agent->connectionType, "x509") == 0)
     {
-        validInfo = GetConnectionInfoFromConnectionx509Certificate(&info);
+        validInfo = GetConnectionInfoFromConnectionx509Certificate(&info, agent->connectionData);
     }
     else
     {
