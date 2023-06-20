@@ -236,12 +236,12 @@ ADUC_Result FSUpdateApplicationHandlerImpl::Install(const tagADUC_WorkflowData* 
         std::string output;
         const int exitCode = ADUC_LaunchChildProcess(command, args, output);
 
-        if (exitCode != static_cast<int>(AZURE_APPLICATION_STATE::UPDATE_SUCCESSFUL))
+        if (exitCode != static_cast<int>(UPDATER_APPLICATION_STATE::UPDATE_SUCCESSFUL))
         {
             Log_Error("Install application failed, extendedResultCode = %d", exitCode);
 
             result = CommitUpdateState();
-            if (result.ExtendedResultCode == static_cast<int>(AZURE_COMMIT_STATE::SUCCESSFUL))
+            if (result.ExtendedResultCode == static_cast<int>(UPDATER_COMMIT_STATE::SUCCESSFUL))
             {
                 Log_Info("Commit of failed application update.");
                 result = { ADUC_Result_Failure, ADUC_ERC_FSUPDATE_HANDLER_INSTALL_FAILURE_APPLICATION_UPDATE };
@@ -276,22 +276,22 @@ ADUC_Result FSUpdateApplicationHandlerImpl::Apply(const tagADUC_WorkflowData* wo
     ADUC_Result result = { ADUC_Result_Failure };
     result = CommitUpdateState();
 
-    if (result.ExtendedResultCode == static_cast<int>(AZURE_COMMIT_STATE::SUCCESSFUL))
+    if (result.ExtendedResultCode == static_cast<int>(UPDATER_COMMIT_STATE::SUCCESSFUL))
     {
         result  = HandleFSUpdateRebootState();
 
-        if (result.ExtendedResultCode == static_cast<int>(AZURE_UPDATE_REBOOT_STATE::INCOMPLETE_APP_UPDATE))
+        if (result.ExtendedResultCode == static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::INCOMPLETE_APP_UPDATE))
         {
             Log_Info("Incomplete application update; reboot is mandatory");
             workflow_request_immediate_reboot(workflowData->WorkflowHandle);
             result = { ADUC_Result_Apply_RequiredImmediateReboot };
         }
-        else if (result.ExtendedResultCode == static_cast<int>(AZURE_UPDATE_REBOOT_STATE::NO_UPDATE_REBOOT_PENDING))
+        else if (result.ExtendedResultCode == static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::NO_UPDATE_REBOOT_PENDING))
         {
             Log_Info("Application update is installed");
             result = { ADUC_Result_Apply_Success };
         }
-        else if (result.ExtendedResultCode == static_cast<int>(AZURE_UPDATE_REBOOT_STATE::ROLLBACK_APP_REBOOT_PENDING))
+        else if (result.ExtendedResultCode == static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::ROLLBACK_APP_REBOOT_PENDING))
         {
             Log_Info("Incomplete application rollback; need reboot");
             workflow_request_immediate_reboot(workflowData->WorkflowHandle);
@@ -303,12 +303,12 @@ ADUC_Result FSUpdateApplicationHandlerImpl::Apply(const tagADUC_WorkflowData* wo
             result = { ADUC_Result_Failure, ADUC_ERC_FSUPDATE_HANDLER_APPLY_FAILURE_UNKNOWN_ERROR };
         }
     }
-    else if (result.ExtendedResultCode == static_cast<int>(AZURE_COMMIT_STATE::UPDATE_NOT_NEEDED))
+    else if (result.ExtendedResultCode == static_cast<int>(UPDATER_COMMIT_STATE::UPDATE_NOT_NEEDED))
     {
         Log_Info("Apply not needed.");
         result = { ADUC_Result_Apply_Success };
     }
-    else if (result.ExtendedResultCode == static_cast<int>(AZURE_COMMIT_STATE::UPDATE_SYSTEM_ERROR))
+    else if (result.ExtendedResultCode == static_cast<int>(UPDATER_COMMIT_STATE::UPDATE_SYSTEM_ERROR))
     {
         Log_Info("Missing reboot.");
         result = { ADUC_Result_Failure, ADUC_ERC_FSUPDATE_HANDLER_APPLY_FAILURE_UPDATE_SYSTEM_ERROR };
@@ -335,7 +335,7 @@ ADUC_Result FSUpdateApplicationHandlerImpl::Cancel(const tagADUC_WorkflowData* w
     ADUC_Result result = { ADUC_Result_Failure };
 
     result  = HandleFSUpdateRebootState();
-    if (result.ExtendedResultCode == static_cast<int>(AZURE_UPDATE_REBOOT_STATE::INCOMPLETE_APP_UPDATE))
+    if (result.ExtendedResultCode == static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::INCOMPLETE_APP_UPDATE))
     {
         Log_Info("Incomplete application update -> proceed rollback");
 
@@ -349,7 +349,7 @@ ADUC_Result FSUpdateApplicationHandlerImpl::Cancel(const tagADUC_WorkflowData* w
 
         result.ExtendedResultCode = ADUC_LaunchChildProcess(command, args, output);
 
-        if (result.ExtendedResultCode != static_cast<int>(AZURE_APPLICATION_STATE::ROLLBACK_SUCCESSFUL))
+        if (result.ExtendedResultCode != static_cast<int>(UPDATER_APPLICATION_STATE::ROLLBACK_SUCCESSFUL))
         {
             std::string error_msg = "Rollback application failed: ";
             error_msg += std::to_string(result.ExtendedResultCode);
@@ -360,13 +360,13 @@ ADUC_Result FSUpdateApplicationHandlerImpl::Cancel(const tagADUC_WorkflowData* w
         }
 
         result  = HandleFSUpdateRebootState();
-        if (result.ExtendedResultCode == static_cast<int>(AZURE_UPDATE_REBOOT_STATE::ROLLBACK_APP_REBOOT_PENDING))
+        if (result.ExtendedResultCode == static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::ROLLBACK_APP_REBOOT_PENDING))
         {
             Log_Info("Incomplete application rollback update -> proceed reboot");
             workflow_request_immediate_reboot(workflowData->WorkflowHandle);
             result = { ADUC_Result_Cancel_RequiredImmediateReboot };
         }
-        else if (result.ExtendedResultCode == static_cast<int>(AZURE_UPDATE_REBOOT_STATE::NO_UPDATE_REBOOT_PENDING))
+        else if (result.ExtendedResultCode == static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::NO_UPDATE_REBOOT_PENDING))
         {
             Log_Info("Complete application rollback update");
             result = { ADUC_Result_Cancel_Success };
@@ -378,12 +378,12 @@ ADUC_Result FSUpdateApplicationHandlerImpl::Cancel(const tagADUC_WorkflowData* w
         }
 
     }
-    else if (result.ExtendedResultCode == static_cast<int>(AZURE_UPDATE_REBOOT_STATE::ROLLBACK_APP_REBOOT_PENDING))
+    else if (result.ExtendedResultCode == static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::ROLLBACK_APP_REBOOT_PENDING))
     {
         Log_Info("Incomplete application rollback update -> reboot processed");
         result = CommitUpdateState();
 
-        if (result.ExtendedResultCode == static_cast<int>(AZURE_UPDATE_REBOOT_STATE::NO_UPDATE_REBOOT_PENDING))
+        if (result.ExtendedResultCode == static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::NO_UPDATE_REBOOT_PENDING))
         {
             Log_Info("Reboot of application update processed -> commited");
             result = { ADUC_Result_Cancel_Success };
@@ -394,7 +394,7 @@ ADUC_Result FSUpdateApplicationHandlerImpl::Cancel(const tagADUC_WorkflowData* w
             result = { ADUC_Result_Cancel_Success, ADUC_ERC_FSUPDATE_HANDLER_CANCEL_NOT_ALLOWED_STATE_ERROR };
         }
     }
-    else if (result.ExtendedResultCode == static_cast<int>(AZURE_UPDATE_REBOOT_STATE::NO_UPDATE_REBOOT_PENDING))
+    else if (result.ExtendedResultCode == static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::NO_UPDATE_REBOOT_PENDING))
     {
         Log_Info("No cancel is possible update already installed");
         result = { ADUC_Result_Failure_Cancelled };
@@ -447,17 +447,17 @@ ADUC_Result FSUpdateApplicationHandlerImpl::IsInstalled(const tagADUC_WorkflowDa
         Log_Info("Expected and installed application version are the same: '%s'", installedCriteria);
         result = HandleFSUpdateRebootState();
 
-        if (result.ExtendedResultCode == static_cast<int>(AZURE_UPDATE_REBOOT_STATE::INCOMPLETE_APP_UPDATE))
+        if (result.ExtendedResultCode == static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::INCOMPLETE_APP_UPDATE))
         {
             Log_Info("Incomplete application update; apply is mandatory");
             result = { ADUC_Result_IsInstalled_MissingCommit };
         }
-        else if (result.ExtendedResultCode == static_cast<int>(AZURE_UPDATE_REBOOT_STATE::INCOMPLETE_FW_UPDATE))
+        else if (result.ExtendedResultCode == static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::INCOMPLETE_FW_UPDATE))
         {
             Log_Info("Incomplete firmware update; apply is mandatory");
             result = { ADUC_Result_IsInstalled_MissingCommit };
         }
-        else if (result.ExtendedResultCode == static_cast<int>(AZURE_UPDATE_REBOOT_STATE::NO_UPDATE_REBOOT_PENDING))
+        else if (result.ExtendedResultCode == static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::NO_UPDATE_REBOOT_PENDING))
         {
             Log_Info("Application update is already installed, expected version matches with current installed: '%s'", installedCriteria);
             result = { ADUC_Result_IsInstalled_Installed };
@@ -472,12 +472,12 @@ ADUC_Result FSUpdateApplicationHandlerImpl::IsInstalled(const tagADUC_WorkflowDa
 
     result = HandleFSUpdateRebootState();
 
-    if (result.ExtendedResultCode == static_cast<int>(AZURE_UPDATE_REBOOT_STATE::FAILED_APP_UPDATE))
+    if (result.ExtendedResultCode == static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::FAILED_APP_UPDATE))
     {
         Log_Info("IsInstall based of failed application update successful -> commit failed update.");
         result = CommitUpdateState();
 
-        if (result.ExtendedResultCode == static_cast<int>(AZURE_COMMIT_STATE::SUCCESSFUL))
+        if (result.ExtendedResultCode == static_cast<int>(UPDATER_COMMIT_STATE::SUCCESSFUL))
         {
             Log_Info("Commit of failed application update.");
             result = { ADUC_Result_IsInstalled_Installed };
@@ -488,12 +488,12 @@ ADUC_Result FSUpdateApplicationHandlerImpl::IsInstalled(const tagADUC_WorkflowDa
             result = { ADUC_Result_Failure, ADUC_ERC_FSUPDATE_HANDLER_ISINSTALLED_FAILURE_COMMIT_PREVIOUS_FAILED_UPDATE };
         }
     }
-    else if (result.ExtendedResultCode == static_cast<int>(AZURE_UPDATE_REBOOT_STATE::FAILED_FW_UPDATE))
+    else if (result.ExtendedResultCode == static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::FAILED_FW_UPDATE))
     {
         Log_Info("IsInstall based of failed firmware update successful -> commit failed update.");
         result = CommitUpdateState();
 
-        if (result.ExtendedResultCode == static_cast<int>(AZURE_COMMIT_STATE::SUCCESSFUL))
+        if (result.ExtendedResultCode == static_cast<int>(UPDATER_COMMIT_STATE::SUCCESSFUL))
         {
             Log_Info("Commit of failed firmware update.");
             result = { ADUC_Result_IsInstalled_Installed };
@@ -504,7 +504,7 @@ ADUC_Result FSUpdateApplicationHandlerImpl::IsInstalled(const tagADUC_WorkflowDa
             result = { ADUC_Result_Failure, ADUC_ERC_FSUPDATE_HANDLER_ISINSTALLED_FAILURE_COMMIT_PREVIOUS_FAILED_UPDATE };
         }
     }
-    else if (result.ExtendedResultCode == static_cast<int>(AZURE_UPDATE_REBOOT_STATE::FW_UPDATE_REBOOT_FAILED))
+    else if (result.ExtendedResultCode == static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::FW_UPDATE_REBOOT_FAILED))
     {
         Log_Info("Failed firmware update reboot");
         result = { ADUC_Result_IsInstalled_Installed };
