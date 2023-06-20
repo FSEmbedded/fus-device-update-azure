@@ -19,7 +19,7 @@ namespace Tasks
 namespace FUSApplication
 {
 /**
-* @brief Runs "fs-azure --application_file <path>" command in  a child process.
+* @brief Runs "<updater command> --application_file <path>" command in  a child process.
 *
 * @param launchArgs An adu-shell launch arguments.
 * @return A result from child process.
@@ -27,7 +27,7 @@ namespace FUSApplication
 ADUShellTaskResult Install(const ADUShell_LaunchArguments& launchArgs);
 
 /**
-* @brief Runs "fs-azure --commit_update" command in  a child process.
+* @brief Runs "<updater command> --commit_update" command in  a child process.
 *
 * @param launchArgs An adu-shell launch arguments.
 * @return A result from child process.
@@ -35,7 +35,7 @@ ADUShellTaskResult Install(const ADUShell_LaunchArguments& launchArgs);
 ADUShellTaskResult CommitUpdate(const ADUShell_LaunchArguments& launchArgs);
 
 /**
-* @brief Runs "fs-azure [--update_reboot_state]" command in  a child process.
+* @brief Runs "<updater command> [--update_reboot_state]" command in  a child process.
 *
 * @param launchArgs An adu-shell launch arguments.
 * @return A result from child process.
@@ -43,7 +43,7 @@ ADUShellTaskResult CommitUpdate(const ADUShell_LaunchArguments& launchArgs);
 ADUShellTaskResult Execute(const ADUShell_LaunchArguments& launchArgs);
 
 /**
-* @brief Runs "fs-azure [--rollback_application]" command in  a child process.
+* @brief Runs "<updater command> [--rollback_application]" command in  a child process.
 *
 * @param launchArgs An adu-shell launch arguments.
 * @return A result from child process.

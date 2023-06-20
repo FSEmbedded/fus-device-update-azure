@@ -19,7 +19,7 @@ namespace Tasks
 namespace FUSFirmware
 {
 /**
-* @brief Runs "fs-azure --firmware_file <path>" command in  a child process.
+* @brief Runs "<updater command> --firmware_file <path>" command in  a child process.
 *
 * @param launchArgs An adu-shell launch arguments.
 * @return A result from child process.

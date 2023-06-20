@@ -421,7 +421,7 @@ ADUC_Result FSUpdateApplicationHandlerImpl::IsInstalled(const tagADUC_WorkflowDa
     char* installedCriteria = ADUC_WorkflowData_GetInstalledCriteria(workflowData);
     ADUC_Result result;
 
-    const std::string command("/usr/sbin/fs-azure");
+    const std::string command(UPDATER_CLI_FULL_CMD);
     std::vector<std::string> args {"--application_version"};
     std::string output;
 
@@ -436,7 +436,7 @@ ADUC_Result FSUpdateApplicationHandlerImpl::IsInstalled(const tagADUC_WorkflowDa
 
     if (output.empty())
     {
-        Log_Error("Version of fs-azure could not be read.");
+        Log_Error("Version of updater command could not be read.");
         result = { ADUC_Result_Failure };
         goto done;
     }

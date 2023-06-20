@@ -25,7 +25,7 @@ namespace Tasks
 namespace FUSApplication
 {
 
-const char* fsazure_command = "fs-azure";
+const char* fsazure_command = UPDATER_CLI_FULL_CMD;
 const char* fsazure_option_install = "--application_file";
 const char* fsazure_option_commit_update = "--commit_update";
 const char* fsazure_option_get_update_state = "--update_reboot_state";
