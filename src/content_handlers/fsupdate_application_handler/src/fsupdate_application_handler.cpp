@@ -424,6 +424,7 @@ ADUC_Result FSUpdateApplicationHandlerImpl::IsInstalled(const tagADUC_WorkflowDa
     const std::string command(UPDATER_CLI_FULL_CMD);
     std::vector<std::string> args {"--application_version"};
     std::string output;
+    std::string special_chars = "\n\t";
 
     const int exitCode = ADUC_LaunchChildProcess(command, args, output);
 
@@ -441,7 +442,11 @@ ADUC_Result FSUpdateApplicationHandlerImpl::IsInstalled(const tagADUC_WorkflowDa
         goto done;
     }
 
-    output.erase(output.end()-1);
+    /* remove special character like word wrap not */
+    for (char c: special_chars) {
+        output.erase(std::remove(output.begin(), output.end(), c), output.end());
+    }
+
     if (output.compare(installedCriteria) == 0)
     {
         Log_Info("Expected and installed application version are the same: '%s'", installedCriteria);

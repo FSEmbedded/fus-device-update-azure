@@ -278,11 +278,11 @@ done:
 ADUC_Result FSUpdateFirmwareHandlerImpl::Apply(const tagADUC_WorkflowData* workflowData)
 {
     ADUC_Result result;
-    result  = CommitUpdateState();
+    result = CommitUpdateState();
 
     if (result.ExtendedResultCode == static_cast<int>(UPDATER_COMMIT_STATE::SUCCESSFUL))
     {
-        result  = HandleFSUpdateRebootState();
+        result = HandleFSUpdateRebootState();
 
         if (result.ExtendedResultCode == static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::INCOMPLETE_FW_UPDATE))
         {
@@ -332,7 +332,7 @@ ADUC_Result FSUpdateFirmwareHandlerImpl::Cancel(const tagADUC_WorkflowData* work
 {
     ADUC_Result result = { ADUC_Result_Failure };
 
-    result  = HandleFSUpdateRebootState();
+    result = HandleFSUpdateRebootState();
     if (result.ExtendedResultCode == static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::INCOMPLETE_APP_UPDATE))
     {
         Log_Info("Incomplete application update -> proceed rollback");
@@ -419,8 +419,9 @@ ADUC_Result FSUpdateFirmwareHandlerImpl::IsInstalled(const tagADUC_WorkflowData*
     ADUC_Result result;
 
     const std::string command(UPDATER_CLI_FULL_CMD);
-    std::vector<std::string> args {"--firmware_version"};
+    std::vector<std::string> args{ "--firmware_version" };
     std::string output;
+    std::string special_chars = "\n\t";
 
     const int exitCode = ADUC_LaunchChildProcess(command, args, output);
 
@@ -438,7 +439,11 @@ ADUC_Result FSUpdateFirmwareHandlerImpl::IsInstalled(const tagADUC_WorkflowData*
         goto done;
     }
 
-    output.erase(output.end()-1);
+    /* remove special character like word wrap not */
+    for (char c: special_chars) {
+        output.erase(std::remove(output.begin(), output.end(), c), output.end());
+    }
+
     if (output.compare(installedCriteria) == 0)
     {
         result = HandleFSUpdateRebootState();
