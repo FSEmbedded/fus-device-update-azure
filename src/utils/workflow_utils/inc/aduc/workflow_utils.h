@@ -118,6 +118,8 @@ ADUCITF_UpdateAction workflow_get_action(ADUC_WorkflowHandle handle);
  */
 char* workflow_get_update_type(ADUC_WorkflowHandle handle);
 
+int workflow_get_update_size(ADUC_WorkflowHandle handle);
+
 /**
  * @brief Gets the update type of the specified workflow.
  *

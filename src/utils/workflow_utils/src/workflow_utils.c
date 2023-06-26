@@ -1465,6 +1465,33 @@ char* workflow_get_update_type(ADUC_WorkflowHandle handle)
     return workflow_get_update_manifest_string_property(handle, ADUCITF_FIELDNAME_UPDATETYPE);
 }
 
+int workflow_get_update_size(ADUC_WorkflowHandle handle)
+{
+	Log_Info("1 ###############");
+    //const JSON_Object* manifest = _workflow_get_update_manifest(handle);
+	Log_Info("2 ###############");
+    //const JSON_Object* properties = json_object_get_object(manifest, ADUCITF_FIELDNAME_FILES);
+
+	/*const JSON_Array* FilesArray = json_object_get_array(manifest, ADUCITF_FIELDNAME_FILES);
+
+	const JSON_Object* File_Info = json_array_get_object(FilesArray, 0);
+
+	return (char*)json_object_get_string(File_Info, "sizeInBytes");*/
+
+    //return 0; //workflow_get_update_manifest_string_property(handle, "files");
+
+    //const JSON_Object* files = _workflow_get_update_manifest_files_map(handle);
+
+	//hier war ne var
+    //const JSON_Object* file = json_object_get_object(files, ADUCITF_FIELDNAME_FILES);
+	//InBytes = json_object_get_number(file, ADUCITF_FIELDNAME_SIZEINBYTES);
+
+    const JSON_Object* files = _workflow_get_update_manifest_files_map(handle);
+    const JSON_Object* file = json_value_get_object(json_object_get_value_at(files, 0));
+    int sizeInBytes = json_object_get_number(file, ADUCITF_FIELDNAME_SIZEINBYTES);
+	return sizeInBytes;
+}
+
 /**
  * @brief Gets the update type of the specified workflow.
  *

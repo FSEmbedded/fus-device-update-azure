@@ -119,6 +119,11 @@ char* ADUC_WorkflowData_GetUpdateType(const ADUC_WorkflowData* workflowData)
     return workflow_get_update_type(workflowData->WorkflowHandle);
 }
 
+int ADUC_WorkflowData_GetUpdateSize(const ADUC_WorkflowData* workflowData)
+{
+    return workflow_get_update_size(workflowData->WorkflowHandle);
+}
+
 /**
  * @brief Gets the installed criteria of the workflow
  *

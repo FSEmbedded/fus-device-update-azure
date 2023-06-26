@@ -28,6 +28,7 @@
 #include "aduc/workflow_data_utils.h"
 #include "aduc/workflow_utils.h"
 #include "adushell_const.hpp"
+#include <azure_c_shared_utility/threadapi.h> // ThreadAPI_Sleep
 
 #include <algorithm>
 #include <fstream>
@@ -39,6 +40,10 @@
 #include <dirent.h>
 
 #include <fs_updater_error.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <string.h>
 
 namespace adushconst = Adu::Shell::Const;
 
@@ -174,6 +179,44 @@ ADUC_Result FSUpdateApplicationHandlerImpl::Download(const tagADUC_WorkflowData*
     }
 
     updateFilename << workFolder << "/" << entity->TargetFilename;
+    {
+        char* installedCriteria = ADUC_WorkflowData_GetInstalledCriteria(workflowData);
+        char* updateType = ADUC_WorkflowData_GetUpdateType(workflowData);
+        int updateSize = ADUC_WorkflowData_GetUpdateSize(workflowData);
+
+        mkdir("/tmp/adu/.work", 0777);
+
+        int fd = open("/tmp/adu/.work/application_version", O_RDWR | O_CREAT, S_IRUSR | S_IRGRP | S_IROTH);
+        if (write(fd, installedCriteria, strlen(installedCriteria)) < 0)
+            Log_Info("Error, could not create server version stamp");
+        close(fd);
+
+		fd = open("/tmp/adu/.work/application_type", O_RDWR | O_CREAT, S_IRUSR | S_IRGRP | S_IROTH);
+		if (write(fd, updateType, strlen(updateType)) < 0)
+			Log_Info("Error, could not create server version stamp");
+		close(fd);
+
+		int fd2 = open("/tmp/adu/.work/application_size", O_RDWR | O_CREAT, S_IRUSR | S_IRGRP | S_IROTH);
+		FILE *fd3 = fdopen(fd2, "r+");
+		if (fprintf(fd3, "%d", updateSize) < 0)
+			Log_Info("Error, could not create server size stamp");
+		fflush(fd3);
+		fclose(fd3);
+
+		while(access("/tmp/adu/.work/downloadApplication", F_OK) < 0)
+		{
+			ThreadAPI_Sleep(100);
+		}
+
+		fd = open("/tmp/adu/.work/application_location", O_RDWR | O_CREAT, S_IRUSR | S_IRGRP | S_IROTH);
+		if(write(fd, updateFilename.str().c_str(), strlen(updateFilename.str().c_str())));
+			Log_Info("Error, could not create download location stamp");
+		close(fd);
+	}
+
+	//--------------------------------------------------
+
+    Log_Info("Download file firmware update file to download '%s'", updateFilename.str().c_str());
 
     result = ExtensionManager::Download(entity, workflowId, workFolder, DO_RETRY_TIMEOUT_DEFAULT, nullptr);
 
@@ -233,6 +276,14 @@ ADUC_Result FSUpdateApplicationHandlerImpl::Install(const tagADUC_WorkflowData* 
 
         Log_Info("Install application image: '%s'", data.str().c_str());
 
+        while(access("/tmp/adu/.work/installApplication", F_OK) < 0)
+        {
+            ThreadAPI_Sleep(100);
+            Log_Info("Waiting for install command");
+        }
+
+        Log_Info("Install firmware image: '%s'", data.str().c_str());
+
         std::string output;
         const int exitCode = ADUC_LaunchChildProcess(command, args, output);
 
@@ -283,6 +334,13 @@ ADUC_Result FSUpdateApplicationHandlerImpl::Apply(const tagADUC_WorkflowData* wo
         if (result.ExtendedResultCode == static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::INCOMPLETE_APP_UPDATE))
         {
             Log_Info("Incomplete application update; reboot is mandatory");
+
+
+            while(access("/tmp/adu/.work/applyApplication", F_OK) < 0)
+            {
+                ThreadAPI_Sleep(100);
+            }
+
             workflow_request_immediate_reboot(workflowData->WorkflowHandle);
             result = { ADUC_Result_Apply_RequiredImmediateReboot };
         }
