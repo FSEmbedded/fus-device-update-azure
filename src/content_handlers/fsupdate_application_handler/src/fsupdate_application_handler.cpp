@@ -97,7 +97,7 @@ static ADUC_Result HandleFSUpdateRebootState()
     ADUC_Result result = { ADUC_Result_Failure };
     std::string command = adushconst::adu_shell;
     std::vector<std::string> args{ adushconst::update_type_opt,
-                                adushconst::update_type_fus_firmware,
+                                adushconst::update_type_fus_application,
                                 adushconst::update_action_opt,
                                 adushconst::update_action_execute,
                                 adushconst::target_options_opt,
@@ -274,7 +274,7 @@ ADUC_Result FSUpdateApplicationHandlerImpl::Install(const tagADUC_WorkflowData* 
         args.emplace_back(adushconst::target_data_opt);
         args.emplace_back(data.str().c_str());
 
-        Log_Info("Install application image: '%s'", data.str().c_str());
+        Log_Info("Application image can be installed: '%s'", data.str().c_str());
 
         while(access("/tmp/adu/.work/installApplication", F_OK) < 0)
         {
@@ -282,7 +282,7 @@ ADUC_Result FSUpdateApplicationHandlerImpl::Install(const tagADUC_WorkflowData* 
             Log_Info("Waiting for install command");
         }
 
-        Log_Info("Install firmware image: '%s'", data.str().c_str());
+        Log_Info("Install application image: '%s'", data.str().c_str());
 
         std::string output;
         const int exitCode = ADUC_LaunchChildProcess(command, args, output);
@@ -302,6 +302,13 @@ ADUC_Result FSUpdateApplicationHandlerImpl::Install(const tagADUC_WorkflowData* 
                 Log_Error("Failed to commit missing application update.");
                 result = { ADUC_Result_Failure, ADUC_ERC_FSUPDATE_HANDLER_INSTALL_FAILURE_COMMIT_UPDATE };
             }
+        } else {
+            /* create applicationInstalled state file */
+            int fd = open("/tmp/adu/.work/applicationInstalled", O_RDONLY | O_CREAT, S_IRUSR | S_IRGRP | S_IROTH);
+            if(fd < 0) {
+                Log_Info("Create file for state application installed fails.");
+            }
+            close(fd);
         }
     }
 
@@ -324,57 +331,36 @@ done:
  */
 ADUC_Result FSUpdateApplicationHandlerImpl::Apply(const tagADUC_WorkflowData* workflowData)
 {
-    ADUC_Result result = { ADUC_Result_Failure };
-    result = CommitUpdateState();
+    ADUC_Result result;
 
-    if (result.ExtendedResultCode == static_cast<int>(UPDATER_COMMIT_STATE::SUCCESSFUL))
+    result = HandleFSUpdateRebootState();
+
+    switch (result.ExtendedResultCode)
     {
-        result  = HandleFSUpdateRebootState();
-
-        if (result.ExtendedResultCode == static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::INCOMPLETE_APP_UPDATE))
+    case static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::INCOMPLETE_APP_UPDATE):
+        Log_Info("Incomplete application update; reboot is mandatory");
+        while (access("/tmp/adu/.work/applyApplication", F_OK) < 0)
         {
-            Log_Info("Incomplete application update; reboot is mandatory");
+            ThreadAPI_Sleep(100);
+        }
 
+        workflow_request_immediate_reboot(workflowData->WorkflowHandle);
+        result = { ADUC_Result_Apply_RequiredImmediateReboot };
+        break;
 
-            while(access("/tmp/adu/.work/applyApplication", F_OK) < 0)
-            {
-                ThreadAPI_Sleep(100);
-            }
-
-            workflow_request_immediate_reboot(workflowData->WorkflowHandle);
-            result = { ADUC_Result_Apply_RequiredImmediateReboot };
-        }
-        else if (result.ExtendedResultCode == static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::NO_UPDATE_REBOOT_PENDING))
-        {
-            Log_Info("Application update is installed");
-            result = { ADUC_Result_Apply_Success };
-        }
-        else if (result.ExtendedResultCode == static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::ROLLBACK_APP_REBOOT_PENDING))
-        {
-            Log_Info("Incomplete application rollback; need reboot");
-            workflow_request_immediate_reboot(workflowData->WorkflowHandle);
-            result = { ADUC_Result_Apply_RequiredImmediateReboot };
-        }
-        else
-        {
-            Log_Error("Unknown error during retrieving current update state.");
-            result = { ADUC_Result_Failure, ADUC_ERC_FSUPDATE_HANDLER_APPLY_FAILURE_UNKNOWN_ERROR };
-        }
-    }
-    else if (result.ExtendedResultCode == static_cast<int>(UPDATER_COMMIT_STATE::UPDATE_NOT_NEEDED))
-    {
-        Log_Info("Apply not needed.");
+    case static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::NO_UPDATE_REBOOT_PENDING):
+        Log_Info("Application update is installed");
         result = { ADUC_Result_Apply_Success };
-    }
-    else if (result.ExtendedResultCode == static_cast<int>(UPDATER_COMMIT_STATE::UPDATE_SYSTEM_ERROR))
-    {
-        Log_Info("Missing reboot.");
-        result = { ADUC_Result_Failure, ADUC_ERC_FSUPDATE_HANDLER_APPLY_FAILURE_UPDATE_SYSTEM_ERROR };
-    }
-    else
-    {
-        Log_Error("Unknown error during apply phase, extendedResultCode = %d", result.ExtendedResultCode);
+        break;
+    case static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::ROLLBACK_APP_REBOOT_PENDING):
+        Log_Info("Incomplete application rollback; need reboot");
+        workflow_request_immediate_reboot(workflowData->WorkflowHandle);
+        result = { ADUC_Result_Apply_RequiredImmediateReboot };
+        break;
+    default:
+        Log_Error("Unknown error during retrieving current application update state.");
         result = { ADUC_Result_Failure, ADUC_ERC_FSUPDATE_HANDLER_APPLY_FAILURE_UNKNOWN_ERROR };
+        break;
     }
 
     return result;

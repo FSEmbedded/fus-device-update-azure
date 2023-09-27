@@ -53,7 +53,7 @@ EXTERN_C_BEGIN
  */
 ContentHandler* CreateUpdateContentHandlerExtension(ADUC_LOG_SEVERITY logLevel)
 {
-    ADUC_Logging_Init(logLevel, "fsupdate-handler");
+    ADUC_Logging_Init(logLevel, "fsupdate-firmware-handler");
     Log_Info("Instantiating an Update Content Handler for 'fus/firmware:1'");
     try
     {
@@ -111,14 +111,14 @@ static ADUC_Result HandleFSUpdateRebootState()
     return result;
 }
 
-static ADUC_Result CommitUpdateState()
+static ADUC_Result CommitUpdateState(const char* update_type)
 {
     ADUC_Result result = { ADUC_Result_Failure };
     Log_Info("Applying firmware update.");
 
     std::string command = adushconst::adu_shell;
     std::vector<std::string> args{ adushconst::update_type_opt,
-                                   adushconst::update_type_fus_application,
+                                   update_type,
                                    adushconst::update_action_opt,
                                    adushconst::update_action_apply };
 
@@ -290,7 +290,7 @@ ADUC_Result FSUpdateFirmwareHandlerImpl::Install(const tagADUC_WorkflowData* wor
         {
             Log_Error("Install firmware failed, extendedResultCode = %d", exitCode);
 
-            result = CommitUpdateState();
+            result = CommitUpdateState(adushconst::update_type_fus_firmware);
             if (result.ExtendedResultCode == static_cast<int>(UPDATER_COMMIT_STATE::SUCCESSFUL))
             {
                 Log_Info("Commit of failed firmware update.");
@@ -302,6 +302,14 @@ ADUC_Result FSUpdateFirmwareHandlerImpl::Install(const tagADUC_WorkflowData* wor
                 result = { ADUC_Result_Failure, ADUC_ERC_FSUPDATE_HANDLER_INSTALL_FAILURE_COMMIT_UPDATE };
             }
             goto done;
+        }
+        else {
+            /* create firmwareInstalled state file */
+            int fd = open("/tmp/adu/.work/firmwareInstalled", O_RDONLY | O_CREAT, S_IRUSR | S_IRGRP | S_IROTH);
+            if(fd < 0) {
+                Log_Info("Create file for state firmware installed fails.");
+            }
+            close(fd);
         }
     }
 
@@ -325,49 +333,47 @@ done:
 ADUC_Result FSUpdateFirmwareHandlerImpl::Apply(const tagADUC_WorkflowData* workflowData)
 {
     ADUC_Result result;
-    result = CommitUpdateState();
 
-    if (result.ExtendedResultCode == static_cast<int>(UPDATER_COMMIT_STATE::SUCCESSFUL))
+    result = HandleFSUpdateRebootState();
+
+    switch (result.ExtendedResultCode)
     {
-        result = HandleFSUpdateRebootState();
+    case static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::FW_REBOOT_PENDING):
 
-        if (result.ExtendedResultCode == static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::INCOMPLETE_FW_UPDATE))
+        while (access("/tmp/adu/.work/applyFirmware", F_OK) < 0)
         {
-            Log_Info("Incomplete firmware update; reboot is mandatory");
+            ThreadAPI_Sleep(100);
+        }
 
-            while(access("/tmp/adu/.work/applyFirmware", F_OK) < 0)
-            {
-                ThreadAPI_Sleep(100);
-            }
+        workflow_request_immediate_reboot(workflowData->WorkflowHandle);
+        result = { ADUC_Result_Apply_RequiredImmediateReboot };
+        break;
 
-            workflow_request_immediate_reboot(workflowData->WorkflowHandle);
-            result = { ADUC_Result_Apply_RequiredImmediateReboot };
-        }
-        else if (result.ExtendedResultCode == static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::NO_UPDATE_REBOOT_PENDING))
+    case static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::INCOMPLETE_FW_UPDATE):
+        Log_Info("Incomplete firmware update; commit is mandatory");
+
+        while (access("/tmp/adu/.work/applyFirmware", F_OK) < 0)
         {
-            Log_Info("Firmware update is installed");
-            result = { ADUC_Result_Apply_Success };
+            ThreadAPI_Sleep(100);
         }
-        else
-        {
-            Log_Error("Unknown error during retrieving current update state.");
-            result = { ADUC_Result_Failure, ADUC_ERC_FSUPDATE_HANDLER_APPLY_FAILURE_UNKNOWN_ERROR };
-        }
-    }
-    else if (result.ExtendedResultCode == static_cast<int>(UPDATER_COMMIT_STATE::UPDATE_NOT_NEEDED))
-    {
+
+        result = CommitUpdateState(adushconst::update_type_fus_firmware);
+        break;
+
+    case static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::NO_UPDATE_REBOOT_PENDING):
+        Log_Info("Firmware update is installed");
+        result = { ADUC_Result_Apply_Success };
+        break;
+
+    case static_cast<int>(UPDATER_COMMIT_STATE::UPDATE_NOT_NEEDED):
         Log_Info("Apply not needed.");
         result = { ADUC_Result_Apply_Success };
-    }
-    else if (result.ExtendedResultCode == static_cast<int>(UPDATER_COMMIT_STATE::UPDATE_SYSTEM_ERROR))
-    {
-        Log_Error("Missing reboot");
-        result = { ADUC_Result_Failure, ADUC_ERC_FSUPDATE_HANDLER_APPLY_FAILURE_UPDATE_SYSTEM_ERROR };
-    }
-    else
-    {
-        Log_Error("Unknown error during apply phase, extendedResultCode = %d", result.ExtendedResultCode);
+        break;
+
+    default:
+        Log_Error("Unknown error during retrieving current firmware update state.");
         result = { ADUC_Result_Failure, ADUC_ERC_FSUPDATE_HANDLER_APPLY_FAILURE_UNKNOWN_ERROR };
+        break;
     }
 
     return result;
@@ -432,7 +438,7 @@ ADUC_Result FSUpdateFirmwareHandlerImpl::Cancel(const tagADUC_WorkflowData* work
     else if (result.ExtendedResultCode == static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::ROLLBACK_FW_REBOOT_PENDING))
     {
         Log_Info("Incomplete firmware rollback update -> reboot processed");
-        result = CommitUpdateState();
+        result = CommitUpdateState(adushconst::update_type_fus_firmware);
 
         if (result.ExtendedResultCode == static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::NO_UPDATE_REBOOT_PENDING))
         {
@@ -529,7 +535,7 @@ ADUC_Result FSUpdateFirmwareHandlerImpl::IsInstalled(const tagADUC_WorkflowData*
     if (result.ExtendedResultCode == static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::FAILED_APP_UPDATE))
     {
         Log_Info("IsInstall based of failed application update successful -> commit failed update.");
-        result = CommitUpdateState();
+        result = CommitUpdateState(adushconst::update_type_fus_application);
 
         if (result.ExtendedResultCode == static_cast<int>(UPDATER_COMMIT_STATE::SUCCESSFUL))
         {
@@ -545,7 +551,7 @@ ADUC_Result FSUpdateFirmwareHandlerImpl::IsInstalled(const tagADUC_WorkflowData*
     else if (result.ExtendedResultCode == static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::FAILED_FW_UPDATE))
     {
         Log_Info("IsInstall based of failed firmware update successful -> commit failed update.");
-        result = CommitUpdateState();
+        result = CommitUpdateState(adushconst::update_type_fus_firmware);
 
         if (result.ExtendedResultCode == static_cast<int>(UPDATER_COMMIT_STATE::SUCCESSFUL))
         {

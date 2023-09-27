@@ -25,13 +25,13 @@ namespace Tasks
 namespace FUSApplication
 {
 
-const char* fsazure_command = UPDATER_CLI_FULL_CMD;
-const char* fsazure_option_install = "--application_file";
-const char* fsazure_option_commit_update = "--commit_update";
-const char* fsazure_option_get_update_state = "--update_reboot_state";
-const char* fsazure_option_rollback_application = "--rollback_application";
+const char* updater_command = UPDATER_CLI_FULL_CMD;
+const char* updater_option_install = "--application_file";
+const char* updater_option_commit_update = "--commit_update";
+const char* updater_option_get_update_state = "--update_reboot_state";
+const char* updater_option_rollback_application = "--rollback_application";
 /**
- * @brief Runs "fs-azure --application_file <path>" command in  a child process.
+ * @brief Runs "<updater command> --application_file <path>" command in  a child process.
  *
  * @param launchArgs An adu-shell launch arguments.
  * @return A result from child process.
@@ -43,16 +43,16 @@ ADUShellTaskResult Install(const ADUShell_LaunchArguments& launchArgs)
 
     Log_Info("Installing image. Path: %s", launchArgs.targetData);
 
-    args.emplace_back(fsazure_option_install);
+    args.emplace_back(updater_option_install);
     args.emplace_back(launchArgs.targetData);
 
-    taskResult.SetExitStatus(ADUC_LaunchChildProcess(fsazure_command, args, taskResult.Output()));
+    taskResult.SetExitStatus(ADUC_LaunchChildProcess(updater_command, args, taskResult.Output()));
 
     return taskResult;
 }
 
 /**
-* @brief Runs "fs-azure --commit_update" command in  a child process.
+* @brief Runs "<updater command> --commit_update" command in  a child process.
 *
 * @param launchArgs An adu-shell launch arguments.
 * @return A result from child process.
@@ -65,15 +65,15 @@ ADUShellTaskResult CommitUpdate(const ADUShell_LaunchArguments& launchArgs)
 
     std::vector<std::string> args;
 
-    args.emplace_back(fsazure_option_commit_update);
+    args.emplace_back(updater_option_commit_update);
 
-    taskResult.SetExitStatus(ADUC_LaunchChildProcess(fsazure_command, args, taskResult.Output()));
+    taskResult.SetExitStatus(ADUC_LaunchChildProcess(updater_command, args, taskResult.Output()));
 
     return taskResult;
 }
 
 /**
-* @brief Runs "fs-azure [--update_reboot_state]" command in  a child process.
+* @brief Runs "<updater command> [--update_reboot_state]" command in  a child process.
 *
 * @param launchArgs An adu-shell launch arguments.
 * @return A result from child process.
@@ -100,15 +100,15 @@ ADUShellTaskResult Execute(const ADUShell_LaunchArguments& launchArgs)
         return taskResult;
     }
 
-    args.emplace_back(fsazure_option_get_update_state);
+    args.emplace_back(updater_option_get_update_state);
 
-    taskResult.SetExitStatus(ADUC_LaunchChildProcess(fsazure_command, args, taskResult.Output()));
+    taskResult.SetExitStatus(ADUC_LaunchChildProcess(updater_command, args, taskResult.Output()));
 
     return taskResult;
 }
 
 /**
-* @brief Runs "fs-azure [--rollback_application]" command in  a child process.
+* @brief Runs "<updater command> [--rollback_application]" command in  a child process.
 *
 * @param launchArgs An adu-shell launch arguments.
 * @return A result from child process.
@@ -121,9 +121,9 @@ ADUShellTaskResult Cancel(const ADUShell_LaunchArguments& launchArgs)
 
     std::vector<std::string> args;
 
-    args.emplace_back(fsazure_option_rollback_application);
+    args.emplace_back(updater_option_rollback_application);
 
-    taskResult.SetExitStatus(ADUC_LaunchChildProcess(fsazure_command, args, taskResult.Output()));
+    taskResult.SetExitStatus(ADUC_LaunchChildProcess(updater_command, args, taskResult.Output()));
 
     return taskResult;
 }
