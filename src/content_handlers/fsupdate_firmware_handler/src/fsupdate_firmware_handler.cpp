@@ -338,7 +338,7 @@ ADUC_Result FSUpdateFirmwareHandlerImpl::Apply(const tagADUC_WorkflowData* workf
 
     switch (result.ExtendedResultCode)
     {
-    case static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::FW_REBOOT_PENDING):
+    case static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::UPDATE_REBOOT_PENDING):
 
         while (access("/tmp/adu/.work/applyFirmware", F_OK) < 0)
         {
