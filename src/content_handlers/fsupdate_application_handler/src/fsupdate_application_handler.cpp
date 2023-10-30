@@ -279,7 +279,7 @@ ADUC_Result FSUpdateApplicationHandlerImpl::Install(const tagADUC_WorkflowData* 
         while(access("/tmp/adu/.work/installApplication", F_OK) < 0)
         {
             ThreadAPI_Sleep(100);
-            Log_Info("Waiting for install command");
+            Log_Debug("Waiting for install command");
         }
 
         Log_Info("Install application image: '%s'", data.str().c_str());
@@ -337,6 +337,16 @@ ADUC_Result FSUpdateApplicationHandlerImpl::Apply(const tagADUC_WorkflowData* wo
 
     switch (result.ExtendedResultCode)
     {
+    case static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::UPDATE_REBOOT_PENDING):
+
+        while (access("/tmp/adu/.work/applyApplication", F_OK) < 0)
+        {
+            ThreadAPI_Sleep(100);
+        }
+
+        workflow_request_immediate_reboot(workflowData->WorkflowHandle);
+        result = { ADUC_Result_Apply_RequiredImmediateReboot };
+        break;
     case static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::INCOMPLETE_APP_UPDATE):
         Log_Info("Incomplete application update; reboot is mandatory");
         while (access("/tmp/adu/.work/applyApplication", F_OK) < 0)
