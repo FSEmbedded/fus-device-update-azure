@@ -19,6 +19,8 @@ set (agent_fus_firmware_c_files ./src/fusfirmware_tasks.cpp)
 
 set (agent_fus_application_c_files ./src/fusapplication_tasks.cpp)
 
+set (agent_fus_update_c_files ./src/fusupdate_tasks.cpp)
+
 set (agent_script_c_files ./src/script_tasks.cpp)
 
 list (LENGTH ADUC_CONTENT_HANDLERS num_content_handlers)
@@ -38,9 +40,9 @@ string (
 set (source_files ${agent_c_files})
 
 # Support all microsoft/* and  fus/* update types by default.
-set (source_files ${agent_c_files} ${agent_apt_c_files} ${agent_swupdate_c_files} ${agent_fus_firmware_c_files} ${agent_fus_application_c_files} ${agent_script_c_files})
+set (source_files ${agent_c_files} ${agent_apt_c_files} ${agent_swupdate_c_files} ${agent_fus_firmware_c_files} ${agent_fus_application_c_files} ${agent_fus_update_c_files} ${agent_script_c_files})
 
-set (adushell_def ADUSHELL_SWUPDATE="yes" ADUSHELL_APT="yes" ADUSHELL_FUS_FIRMWARE="yes" ADUSHELL_FUS_APPLICATION="yes"  ADUSHELL_SCRIPT="yes")
+set (adushell_def ADUSHELL_SWUPDATE="yes" ADUSHELL_APT="yes" ADUSHELL_FUS_FIRMWARE="yes" ADUSHELL_FUS_APPLICATION="yes" ADUSHELL_FUS_UPDATE="yes"  ADUSHELL_SCRIPT="yes")
 
 add_executable (${target_name} ${source_files})
 

@@ -32,6 +32,7 @@ add_subdirectory (steps_handler)
 add_subdirectory (swupdate_handler)
 add_subdirectory (fsupdate_application_handler)
 add_subdirectory (fsupdate_firmware_handler)
+add_subdirectory (fsupdate_update_handler)
 
 
 #
