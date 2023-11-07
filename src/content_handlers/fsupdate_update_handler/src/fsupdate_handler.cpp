@@ -334,15 +334,6 @@ ADUC_Result FSUpdateHandlerImpl::Install(const tagADUC_WorkflowData* workflowDat
 
         if (exitCode == static_cast<int>(UPDATER_FIRMWARE_AND_APPLICATION_STATE::UPDATE_SUCCESSFUL))
         {
-            /* create firmwareInstalled state file */
-            int fd = open("/tmp/adu/.work/updateInstalled", O_RDONLY | O_CREAT, S_IRUSR | S_IRGRP | S_IROTH);
-            if(fd < 0) {
-                Log_Info("Create file for state update installed fails.");
-            }
-            else
-            {
-                close(fd);
-            }
             Log_Info("Install succeeded");
             result = { ADUC_Result_Install_Success };
         }
@@ -597,6 +588,24 @@ ADUC_Result FSUpdateHandlerImpl::IsInstalled(const tagADUC_WorkflowData* workflo
             Log_Info("Incomplete firmware and ...");
             result = { ADUC_Result_IsInstalled_MissingCommit };
         }
+        else if (result.ExtendedResultCode == static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::NO_UPDATE_REBOOT_PENDING))
+        {
+            std::string updatename("Firmware");
+
+            if (up_type == UPDATE_APPLICATION)
+                updatename = "Application";
+
+            Log_Info(
+                "%s update is already installed, expected version matches with current installed: '%s'",
+                updatename.c_str(),
+                installedCriteria);
+            result = { ADUC_Result_IsInstalled_Installed };
+            /* In case of common update application update state need to be checked too. */
+            if (up_type != UPDATE_COMMON)
+            {
+                goto done;
+            }
+        }
         else
         {
             if (result.ExtendedResultCode == static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::INCOMPLETE_APP_UPDATE))
@@ -608,20 +617,6 @@ ADUC_Result FSUpdateHandlerImpl::IsInstalled(const tagADUC_WorkflowData* workflo
             {
                 Log_Info("Incomplete firmware update; apply is mandatory");
                 result = { ADUC_Result_IsInstalled_MissingCommit };
-            }
-            else if (
-                result.ExtendedResultCode == static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::NO_UPDATE_REBOOT_PENDING))
-            {
-                std::string updatename("Firmware");
-
-                if (up_type == UPDATE_APPLICATION)
-                    updatename = "Application";
-
-                Log_Info(
-                    "%s update is already installed, expected version matches with current installed: '%s'",
-                    updatename,
-                    installedCriteria);
-                result = { ADUC_Result_IsInstalled_Installed };
             }
             else
             {
