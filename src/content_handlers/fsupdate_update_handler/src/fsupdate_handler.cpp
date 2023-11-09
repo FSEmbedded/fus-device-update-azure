@@ -631,6 +631,8 @@ ADUC_Result FSUpdateHandlerImpl::IsInstalled(const tagADUC_WorkflowData* workflo
     {
         /* In case of common update, application update has to be checked too. */
         args[0] = "--application_version";
+        /* clear old value of firmware_version */
+        cmd_output.clear();
         exitCode = ADUC_LaunchChildProcess(command, args, cmd_output);
 
         if (exitCode != 0)
