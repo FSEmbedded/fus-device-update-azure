@@ -705,6 +705,7 @@ ADUC_Result FSUpdateHandlerImpl::IsInstalled(const tagADUC_WorkflowData* workflo
             result = { ADUC_Result_Failure,
                        ADUC_ERC_FSUPDATE_HANDLER_ISINSTALLED_FAILURE_COMMIT_PREVIOUS_FAILED_UPDATE };
         }
+        goto done;
     }
     else if (result.ExtendedResultCode == static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::FAILED_FW_UPDATE))
     {
@@ -722,11 +723,13 @@ ADUC_Result FSUpdateHandlerImpl::IsInstalled(const tagADUC_WorkflowData* workflo
             result = { ADUC_Result_Failure,
                        ADUC_ERC_FSUPDATE_HANDLER_ISINSTALLED_FAILURE_COMMIT_PREVIOUS_FAILED_UPDATE };
         }
+        goto done;
     }
     else if (result.ExtendedResultCode == static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::FW_UPDATE_REBOOT_FAILED))
     {
         Log_Info("Failed update reboot");
         result = { ADUC_Result_IsInstalled_Installed };
+        goto done;
     }
 
     Log_Info(
