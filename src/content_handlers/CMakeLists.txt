@@ -25,15 +25,13 @@ target_link_libraries (
 #
 set_property (TARGET ${PROJECT_NAME} PROPERTY POSITION_INDEPENDENT_CODE ON)
 
+if (${use_ms_default_handler})
 add_subdirectory (apt_handler)
 add_subdirectory (script_handler)
 add_subdirectory (simulator_handler)
 add_subdirectory (steps_handler)
 add_subdirectory (swupdate_handler)
-add_subdirectory (fsupdate_application_handler)
-add_subdirectory (fsupdate_firmware_handler)
-add_subdirectory (fsupdate_update_handler)
-
+endif()
 
 #
 # Note: add more update content handler extensions here.
@@ -41,6 +39,16 @@ add_subdirectory (fsupdate_update_handler)
 # e.g.
 #   add_subdirectory (my_handler)
 #
+
+if (${use_fsup_app_handler})
+add_subdirectory (fsupdate_application_handler)
+endif()
+if (${use_fsup_fw_handler})
+add_subdirectory (fsupdate_firmware_handler)
+endif()
+if (${use_fsup_update_handler})
+add_subdirectory (fsupdate_update_handler)
+endif()
 
 if (${ADUC_PLATFORM_LAYER} STREQUAL "simulator")
     target_compile_definitions (${PROJECT_NAME} PUBLIC ADUC_SIMULATOR_MODE=1)
