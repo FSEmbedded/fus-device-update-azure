@@ -291,7 +291,7 @@ ADUC_Result FSUpdateFirmwareHandlerImpl::Install(const tagADUC_WorkflowData* wor
             Log_Error("Install firmware failed, extendedResultCode = %d", exitCode);
 
             result = CommitUpdateState(adushconst::update_type_fus_firmware);
-            if (result.ExtendedResultCode == static_cast<int>(UPDATER_COMMIT_STATE::SUCCESSFUL))
+            if (result.ExtendedResultCode == static_cast<int>(UPDATER_COMMIT_STATE::UPDATE_COMMIT_SUCCESSFUL))
             {
                 Log_Info("Commit of failed firmware update.");
                 result = { ADUC_Result_Failure, ADUC_ERC_FSUPDATE_HANDLER_INSTALL_FAILURE_FIRMWARE_UPDATE };
@@ -406,7 +406,7 @@ ADUC_Result FSUpdateFirmwareHandlerImpl::Cancel(const tagADUC_WorkflowData* work
 
         result.ExtendedResultCode = ADUC_LaunchChildProcess(command, args, output);
 
-        if (result.ExtendedResultCode != static_cast<int>(UPDATER_FIRMWARE_STATE::ROLLBACK_SUCCESSFUL))
+        if (result.ExtendedResultCode != static_cast<int>(UPDATER_UPDATE_ROLLBACK_STATE::UPDATE_ROLLBACK_SUCCESSFUL))
         {
             std::string error_msg = "Rollback firmware failed: ";
             error_msg += std::to_string(result.ExtendedResultCode);
@@ -537,7 +537,7 @@ ADUC_Result FSUpdateFirmwareHandlerImpl::IsInstalled(const tagADUC_WorkflowData*
         Log_Info("IsInstall based of failed application update successful -> commit failed update.");
         result = CommitUpdateState(adushconst::update_type_fus_application);
 
-        if (result.ExtendedResultCode == static_cast<int>(UPDATER_COMMIT_STATE::SUCCESSFUL))
+        if (result.ExtendedResultCode == static_cast<int>(UPDATER_COMMIT_STATE::UPDATE_COMMIT_SUCCESSFUL))
         {
             Log_Info("Commit of failed application update.");
             result = { ADUC_Result_IsInstalled_Installed };
@@ -553,7 +553,7 @@ ADUC_Result FSUpdateFirmwareHandlerImpl::IsInstalled(const tagADUC_WorkflowData*
         Log_Info("IsInstall based of failed firmware update successful -> commit failed update.");
         result = CommitUpdateState(adushconst::update_type_fus_firmware);
 
-        if (result.ExtendedResultCode == static_cast<int>(UPDATER_COMMIT_STATE::SUCCESSFUL))
+        if (result.ExtendedResultCode == static_cast<int>(UPDATER_COMMIT_STATE::UPDATE_COMMIT_SUCCESSFUL))
         {
             Log_Info("Commit of failed firmware update.");
             result = { ADUC_Result_IsInstalled_Installed };
