@@ -11,6 +11,7 @@
 #include "aduc/content_handler.hpp"
 #include "aduc/logging.h"
 #include <aduc/result.h>
+#include <filesystem>
 #include <memory>
 #include <string>
 
@@ -40,6 +41,11 @@ class FSUpdateHandlerImpl : public ContentHandler
 private:
     update_type_t update_type;
     const char* update_type_names[3] = {"firmware", "application", "common"};
+    /* path to default work directory */
+    std::filesystem::path work_dir;
+    /* default permissions of work directory */
+    std::filesystem::perms work_dir_perms;
+    bool create_work_dir();
 public:
     static ContentHandler* CreateContentHandler();
 
@@ -63,7 +69,7 @@ public:
 
 protected:
     // Protected constructor, must call CreateContentHandler factory method or from derived simulator class
-    FSUpdateHandlerImpl() = default;
+    FSUpdateHandlerImpl();
 };
 
 #endif // ADUC_FSUPDATE_HANDLER_HPP

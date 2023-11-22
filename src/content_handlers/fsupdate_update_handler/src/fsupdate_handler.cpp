@@ -47,6 +47,11 @@
 
 #define HANDLER_PROPERTIES_UPDATE_TYPE "updateType"
 
+/* if not defined in configuration file set to default value */
+#ifndef TEMP_ADU_WORK_DIR
+#define TEMP_ADU_WORK_DIR "/tmp/adu/.work"
+#endif
+
 namespace adushconst = Adu::Shell::Const;
 
 EXTERN_C_BEGIN
@@ -74,6 +79,11 @@ ContentHandler* CreateUpdateContentHandlerExtension(ADUC_LOG_SEVERITY logLevel)
     return nullptr;
 }
 EXTERN_C_END
+
+FSUpdateHandlerImpl::FSUpdateHandlerImpl() :
+    work_dir(TEMP_ADU_WORK_DIR), work_dir_perms(std::filesystem::perms::all)
+{
+}
 
 /**
  * @brief Destructor for the FSUpdate Handler Impl class.
@@ -126,6 +136,31 @@ update_type_t FSUpdateHandlerImpl::getUpdateType(std::string & updateTypeName)
 
     return up_type;
 
+}
+
+bool FSUpdateHandlerImpl::create_work_dir()
+{
+    std::string msg(work_dir);
+
+    if (std::filesystem::exists(work_dir))
+    {
+        msg += " does exist.";
+        Log_Debug("FSUpdate %s", msg.c_str());
+        return false;
+    }
+
+    try
+    {
+        std::filesystem::create_directory(work_dir);
+        std::filesystem::permissions(work_dir, work_dir_perms, std::filesystem::perm_options::replace);
+    }
+    catch (std::filesystem::filesystem_error const& ex)
+    {
+        Log_Warn("FSUpdate %s", ex.what());
+    }
+    msg += " created.";
+    Log_Debug("FSUpdate %s", msg.c_str());
+    return true;
 }
 
 static ADUC_Result HandleFSUpdateRebootState()
@@ -220,45 +255,81 @@ ADUC_Result FSUpdateHandlerImpl::Download(const tagADUC_WorkflowData* workflowDa
         const char* updateType = this->update_type_names[this->update_type];
         int updateSize = ADUC_WorkflowData_GetUpdateSize(workflowData);
 
-        mkdir("/tmp/adu/.work", 0777);
+        this->create_work_dir();
+        std::filesystem::path file_path = (work_dir / "update_version");
+        std::ofstream update_version(file_path);
+        if (!update_version.is_open())
+        {
+            Log_Error("Could not create %s.", file_path.string().c_str());
+            result = { .ResultCode = ADUC_Result_Failure,
+                   .ExtendedResultCode = ADUC_ERC_FSUPDATE_HANDLER_DOWNLOAD_FAILURE_CREATE_FAILED_UPDATE_VERSION };
+            goto done;
+        }
+        update_version << installedCriteria;
+        update_version.close();
 
-        int fd = open("/tmp/adu/.work/update_version", O_RDWR | O_CREAT, S_IRUSR | S_IRGRP | S_IROTH);
-        if (write(fd, installedCriteria, strlen(installedCriteria)) < 0)
-        {
-            Log_Info("Error, could not create server version stamp");
-        }
-        close(fd);
-        fd = open("/tmp/adu/.work/update_type", O_RDWR | O_CREAT, S_IRUSR | S_IRGRP | S_IROTH);
-        if (write(fd, updateType, strlen(updateType)) < 0)
-        {
-            Log_Info("Error, could not create server version stamp");
-        }
-        close(fd);
+        std::filesystem::permissions(
+            file_path,
+            std::filesystem::perms::owner_read | std::filesystem::perms::owner_write
+                | std::filesystem::perms::group_read | std::filesystem::perms::others_read,
+            std::filesystem::perm_options::replace);
 
-       fd = open("/tmp/adu/.work/update_size", O_RDWR | O_CREAT, S_IRUSR | S_IRGRP | S_IROTH);
-       FILE *fp = fdopen(fd, "r+");
-       if (fprintf(fp, "%d", updateSize) < 0)
+        file_path = work_dir / "update_type";
+        std::ofstream update_type(file_path);
+        if (!update_type.is_open())
         {
-            Log_Info("Error, could not create server size stamp");
+            Log_Error("Could not create %s.", file_path.string().c_str());
+            result = { .ResultCode = ADUC_Result_Failure,
+                   .ExtendedResultCode = ADUC_ERC_FSUPDATE_HANDLER_DOWNLOAD_FAILURE_CREATE_FAILED_UPDATE_TYPE };
+            goto done;
         }
-        else
-        {
-            fflush(fp);
-        }
-		fclose(fp);
-        close(fd);
+        update_type << updateType;
+        update_type.close();
+        std::filesystem::permissions(
+            file_path,
+            std::filesystem::perms::owner_read | std::filesystem::perms::owner_write
+                | std::filesystem::perms::group_read | std::filesystem::perms::others_read,
+            std::filesystem::perm_options::replace);
 
-        while(access("/tmp/adu/.work/downloadUpdate", F_OK) < 0)
+        file_path = work_dir / "update_size";
+        std::ofstream update_size(file_path);
+        if (!update_size.is_open())
+        {
+            result = { .ResultCode = ADUC_Result_Failure,
+                   .ExtendedResultCode = ADUC_ERC_FSUPDATE_HANDLER_DOWNLOAD_FAILURE_CREATE_FAILED_UPDATE_SIZE };
+            Log_Error("Could not create %s.", file_path.string().c_str());
+            goto done;
+        }
+        update_size << updateSize;
+        update_size.close();
+        std::filesystem::permissions(
+            file_path,
+            std::filesystem::perms::owner_read | std::filesystem::perms::owner_write
+                | std::filesystem::perms::group_read | std::filesystem::perms::others_read,
+            std::filesystem::perm_options::replace);
+
+        while (std::filesystem::exists(work_dir / "downloadUpdate") == false)
         {
             ThreadAPI_Sleep(100);
         }
 
-        fd = open("/tmp/adu/.work/update_location", O_RDWR | O_CREAT, S_IRUSR | S_IRGRP | S_IROTH);
-        if(write(fd, updateFilename.str().c_str(), strlen(updateFilename.str().c_str())))
+        file_path = work_dir / "update_location";
+        std::ofstream update_location(file_path);
+        if (!update_location.is_open())
         {
-            Log_Info("Error, could not create download location stamp");
+            result = { .ResultCode = ADUC_Result_Failure,
+                   .ExtendedResultCode = ADUC_ERC_FSUPDATE_HANDLER_DOWNLOAD_FAILURE_CREATE_FAILED_UPDATE_LOCATION };
+            Log_Error("Could not create %s.", file_path.string().c_str());
+            goto done;
         }
-        close(fd);
+
+        update_location << updateFilename.str().c_str();
+        update_location.close();
+        std::filesystem::permissions(
+            file_path,
+            std::filesystem::perms::owner_read | std::filesystem::perms::owner_write
+                | std::filesystem::perms::group_read | std::filesystem::perms::others_read,
+            std::filesystem::perm_options::replace);
     }
 
     //--------------------------------------------------
@@ -321,7 +392,7 @@ ADUC_Result FSUpdateHandlerImpl::Install(const tagADUC_WorkflowData* workflowDat
         args.emplace_back(adushconst::target_data_opt);
         args.emplace_back(data.str().c_str());
 
-        while(access("/tmp/adu/.work/installUpdate", F_OK) < 0)
+        while (std::filesystem::exists(work_dir / "installUpdate") == false)
         {
             ThreadAPI_Sleep(100);
             Log_Debug("Waiting for install command");
@@ -384,7 +455,8 @@ ADUC_Result FSUpdateHandlerImpl::Apply(const tagADUC_WorkflowData* workflowData)
     switch (result.ExtendedResultCode)
     {
     case static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::UPDATE_REBOOT_PENDING):
-        while (access("/tmp/adu/.work/applyUpdate", F_OK) < 0)
+        Log_Debug("Update reboot pending; wait for apply.");
+        while (std::filesystem::exists(work_dir / "applyUpdate") == false)
         {
             ThreadAPI_Sleep(100);
         }
@@ -396,22 +468,21 @@ ADUC_Result FSUpdateHandlerImpl::Apply(const tagADUC_WorkflowData* workflowData)
     case static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::INCOMPLETE_FW_UPDATE):
     case static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::INCOMPLETE_APP_UPDATE):
     case static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::INCOMPLETE_APP_FW_UPDATE):
-        Log_Info("Incomplete update; commit is mandatory");
+        Log_Debug("Incomplete update; commit is mandatory");
 
-        while (access("/tmp/adu/.work/applyUpdate", F_OK) < 0)
+        while (std::filesystem::exists(work_dir / "applyUpdate") == false)
         {
             ThreadAPI_Sleep(100);
         }
-
         break;
 
     case static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::NO_UPDATE_REBOOT_PENDING):
-        Log_Info("Update is installed");
+        Log_Debug("Update is installed");
         result = { ADUC_Result_Apply_Success };
         break;
 
     case static_cast<int>(UPDATER_COMMIT_STATE::UPDATE_NOT_NEEDED):
-        Log_Info("Apply not needed.");
+        Log_Debug("Apply not needed.");
         result = { ADUC_Result_Apply_Success };
         break;
 
@@ -451,7 +522,7 @@ ADUC_Result FSUpdateHandlerImpl::Cancel(const tagADUC_WorkflowData* workflowData
 
         result.ExtendedResultCode = ADUC_LaunchChildProcess(command, args, output);
 
-        if (result.ExtendedResultCode != static_cast<int>(UPDATER_FIRMWARE_STATE::ROLLBACK_SUCCESSFUL))
+        if (result.ExtendedResultCode != static_cast<int>(UPDATER_UPDATE_ROLLBACK_STATE::UPDATE_ROLLBACK_SUCCESSFUL))
         {
             std::string error_msg = "Rollback firmware failed: ";
             error_msg += std::to_string(result.ExtendedResultCode);
@@ -694,7 +765,7 @@ ADUC_Result FSUpdateHandlerImpl::IsInstalled(const tagADUC_WorkflowData* workflo
         Log_Info("IsInstalled based of failed application update successful -> commit failed update.");
         result = CommitUpdateState(adushconst::update_type_fus_application);
 
-        if (result.ExtendedResultCode == static_cast<int>(UPDATER_COMMIT_STATE::SUCCESSFUL))
+        if (result.ExtendedResultCode == static_cast<int>(UPDATER_COMMIT_STATE::UPDATE_COMMIT_SUCCESSFUL))
         {
             Log_Info("Commit of failed application update.");
             result = { ADUC_Result_IsInstalled_Installed };
@@ -712,7 +783,7 @@ ADUC_Result FSUpdateHandlerImpl::IsInstalled(const tagADUC_WorkflowData* workflo
         Log_Info("IsInstalled based of failed firmware update successful -> commit failed update.");
         result = CommitUpdateState(adushconst::update_type_fus_firmware);
 
-        if (result.ExtendedResultCode == static_cast<int>(UPDATER_COMMIT_STATE::SUCCESSFUL))
+        if (result.ExtendedResultCode == static_cast<int>(UPDATER_COMMIT_STATE::UPDATE_COMMIT_SUCCESSFUL))
         {
             Log_Info("Commit of failed firmware update.");
             result = { ADUC_Result_IsInstalled_Installed };
