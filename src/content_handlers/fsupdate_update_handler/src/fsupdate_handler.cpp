@@ -146,7 +146,8 @@ bool FSUpdateHandlerImpl::create_work_dir()
     {
         msg += " does exist.";
         Log_Debug("FSUpdate %s", msg.c_str());
-        return false;
+        /* remove all */
+        std::filesystem::remove_all(work_dir);
     }
 
     try
