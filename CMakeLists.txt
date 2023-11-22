@@ -1,6 +1,7 @@
 cmake_minimum_required (VERSION 3.5)
 
 project (azure_device_update_client)
+set(CMAKE_CXX_STANDARD 17)
 
 # Print out CMake build variables.
 message (STATUS)
