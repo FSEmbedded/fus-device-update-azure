@@ -404,31 +404,36 @@ ADUC_Result FSUpdateHandlerImpl::Install(const tagADUC_WorkflowData* workflowDat
         std::string output;
         const int exitCode = ADUC_LaunchChildProcess(command, args, output);
 
-        if (exitCode == static_cast<int>(UPDATER_FIRMWARE_AND_APPLICATION_STATE::UPDATE_SUCCESSFUL))
+        if ((exitCode == static_cast<int>(UPDATER_FIRMWARE_STATE::UPDATE_SUCCESSFUL))
+            || (exitCode == static_cast<int>(UPDATER_APPLICATION_STATE::UPDATE_SUCCESSFUL))
+            || (exitCode == static_cast<int>(UPDATER_FIRMWARE_AND_APPLICATION_STATE::UPDATE_SUCCESSFUL)))
         {
             Log_Info("Install succeeded");
             result = { ADUC_Result_Install_Success };
         }
-        else 
+        else
         {
             Log_Error("Install failed, extendedResultCode = %d", exitCode);
-            if(getUpdateType() == UPDATE_FIRMWARE)
+            if (getUpdateType() == UPDATE_FIRMWARE)
             {
                 result = { .ResultCode = ADUC_Result_Failure,
-                .ExtendedResultCode = ADUC_ERC_FSUPDATE_HANDLER_INSTALL_FAILURE_FIRMWARE_UPDATE };
-            } else if(getUpdateType() == UPDATE_APPLICATION)
+                           .ExtendedResultCode = ADUC_ERC_FSUPDATE_HANDLER_INSTALL_FAILURE_FIRMWARE_UPDATE };
+            }
+            else if (getUpdateType() == UPDATE_APPLICATION)
             {
                 result = { .ResultCode = ADUC_Result_Failure,
-                .ExtendedResultCode = ADUC_ERC_FSUPDATE_HANDLER_INSTALL_FAILURE_APPLICATION_UPDATE };
-            } else if(getUpdateType() == UPDATE_COMMON)
+                           .ExtendedResultCode = ADUC_ERC_FSUPDATE_HANDLER_INSTALL_FAILURE_APPLICATION_UPDATE };
+            }
+            else if (getUpdateType() == UPDATE_COMMON)
             {
                 result = { .ResultCode = ADUC_Result_Failure,
-                .ExtendedResultCode = ADUC_ERC_FSUPDATE_HANDLER_INSTALL_FAILURE_BAD_FILE_ENTITY };
-            } else
+                           .ExtendedResultCode = ADUC_ERC_FSUPDATE_HANDLER_INSTALL_FAILURE_BAD_FILE_ENTITY };
+            }
+            else
             {
                 /* update type is unkown */
                 result = { .ResultCode = ADUC_Result_Failure,
-                .ExtendedResultCode = ADUC_ERC_FSUPDATE_HANDLER_INSTALL_FAILURE_BAD_FILE_ENTITY };
+                           .ExtendedResultCode = ADUC_ERC_FSUPDATE_HANDLER_INSTALL_FAILURE_BAD_FILE_ENTITY };
             }
         }
     }
