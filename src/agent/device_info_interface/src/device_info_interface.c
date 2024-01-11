@@ -61,8 +61,8 @@ static DeviceInfoInterface_Data deviceInfoInterface_Data[] = {
     { DIIP_ProcessorManufacturer, "processorManufacturer", DIIDT_String },
     { DIIP_TotalMemory, "totalMemory", DIIDT_Long },
     { DIIP_TotalStorage, "totalStorage", DIIDT_Long },
-    { DIIP_FirmwareVersion, "fwVersion", DIIDT_Long },
-    { DIIP_ApplicationVersion, "appVersion", DIIDT_Long }
+    { DIIP_FirmwareVersion, "fwVersion", DIIDT_String },
+    { DIIP_ApplicationVersion, "appVersion", DIIDT_String }
 };
 
 /**
