@@ -94,6 +94,13 @@ static bool ADUC_AgentInfo_Init(ADUC_AgentInfo* agent, const JSON_Object* agent_
     JSON_Object* connection_source = json_object_get_object(agent_obj, CONFIG_CONNECTION_SOURCE);
     const char* connection_type = NULL;
     const char* connection_data = NULL;
+    const char* x509_container = NULL;
+    const char* x509_cert = NULL;
+    const char* x509_key = NULL;
+    const char* device_id = NULL;
+    const char* iotHubName = NULL;
+    const char* iotHubSuffix = NULL;
+
 
     if (connection_source == NULL)
     {
@@ -108,6 +115,20 @@ static bool ADUC_AgentInfo_Init(ADUC_AgentInfo* agent, const JSON_Object* agent_
         || model == NULL)
     {
         goto done;
+    }
+    x509_container = json_object_get_string(connection_source, "x509_container");
+    x509_cert = json_object_get_string(connection_source, "x509_cert");
+    x509_key = json_object_get_string(connection_source, "x509_key");
+    device_id = json_object_get_string(connection_source, "device_id");
+    iotHubName = json_object_get_string(connection_source, "iotHubName");
+    iotHubSuffix = json_object_get_string(connection_source, "iotHubSuffix");
+
+    if ((x509_container != NULL) || (x509_cert != NULL) || (x509_key != NULL) || (device_id != NULL) || (iotHubName != NULL) || (iotHubSuffix != NULL))
+    {
+        if ((x509_container == NULL) || (x509_cert == NULL) || (x509_key == NULL) || (device_id == NULL) || (iotHubName == NULL) || (iotHubSuffix == NULL))
+        {
+            goto done;
+        }
     }
 
     if (mallocAndStrcpy_s(&(agent->name), name) != 0)
@@ -138,6 +159,45 @@ static bool ADUC_AgentInfo_Init(ADUC_AgentInfo* agent, const JSON_Object* agent_
     if (mallocAndStrcpy_s(&(agent->model), model) != 0)
     {
         goto done;
+    }
+
+    if (x509_container != NULL)
+    {
+        if (mallocAndStrcpy_s(&(agent->x509_container), x509_container) != 0)
+        {
+            Log_Error("The content of field \"x509_container\" could not be copied");
+            goto done;
+        }
+
+        if (mallocAndStrcpy_s(&(agent->x509_cert), x509_cert) != 0)
+        {
+            Log_Error("The content of field \"x509_cert\" could not be copied");
+            goto done;
+        }
+
+        if (mallocAndStrcpy_s(&(agent->x509_key), x509_key) != 0)
+        {
+            Log_Error("The content of field \"x509_key\" could not be copied");
+            goto done;
+        }
+
+        if (mallocAndStrcpy_s(&(agent->device_id), device_id) != 0)
+        {
+            Log_Error("The content of field \"device_id\" could not be copied");
+            goto done;
+        }
+
+        if (mallocAndStrcpy_s(&(agent->iotHubName), iotHubName) != 0)
+        {
+            Log_Error("The content of field \"iotHubName\" could not be copied");
+            goto done;
+        }
+
+        if (mallocAndStrcpy_s(&(agent->iotHubSuffix), iotHubSuffix) != 0)
+        {
+            Log_Error("The content of field \"iotHubSuffix\" could not be copied");
+            goto done;
+        }
     }
 
     agent->additionalDeviceProperties = json_object_get_object(agent_obj, CONFIG_ADDITIONAL_DEVICE_PROPERTIES);
@@ -178,6 +238,24 @@ static void ADUC_AgentInfo_Free(ADUC_AgentInfo* agent)
 
     free(agent->model);
     agent->model = NULL;
+    
+    free(agent->x509_container);
+    agent->x509_container = NULL;
+
+    free(agent->x509_cert);
+    agent->x509_cert = NULL;
+
+    free(agent->x509_key);
+    agent->x509_key = NULL;
+
+    free(agent->device_id);
+    agent->device_id = NULL;
+
+    free(agent->iotHubName);
+    agent->iotHubName = NULL;
+
+    free(agent->iotHubSuffix);
+    agent->iotHubSuffix = NULL;
 
     agent->additionalDeviceProperties = NULL;
 }

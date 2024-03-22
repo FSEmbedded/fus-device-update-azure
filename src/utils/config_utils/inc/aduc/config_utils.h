@@ -37,7 +37,7 @@ typedef struct tagADUC_AgentInfo
 
     char* runas; /**< Run as a trusted user. */
 
-    char* connectionType; /**< It can be either AIS or string. */
+    char* connectionType; /**< It can be either AIS, string or x509. */
 
     char* connectionData; /**< the name in AIS principal (AIS); or the connectionString (connectionType string). */
 
