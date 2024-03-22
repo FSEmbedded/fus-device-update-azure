@@ -16,9 +16,11 @@
 #include <string>
 
 typedef enum UpdateTypeT {
-    UPDATE_FIRMWARE = 0,
-    UPDATE_APPLICATION,
-    UPDATE_COMMON,
+    UPDATE_FIRMWARE = 0, // raw single firmware update
+    UPDATE_APPLICATION, // raw single application update
+    UPDATE_COMMON_FIRMWARE, // common firmware update
+    UPDATE_COMMON_APPLICATION, // common application update
+    UPDATE_COMMON_BOTH, // common application and firmware update
     UPDATE_UNKNOWN = -1,
 } update_type_t;
 
@@ -40,7 +42,7 @@ class FSUpdateHandlerImpl : public ContentHandler
 {
 private:
     update_type_t update_type;
-    const char* update_type_names[3] = {"firmware", "application", "common"};
+    const char* update_type_names[5] = {"firmware", "application", "common-firmware", "common-application", "common-both"};
     /* path to default work directory */
     std::filesystem::path work_dir;
     /* default permissions of work directory */

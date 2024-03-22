@@ -46,6 +46,8 @@
 #include <string.h>
 
 #define HANDLER_PROPERTIES_UPDATE_TYPE "updateType"
+#define UPDATE_TYPE_APP "app"
+#define UPDATE_TYPE_FW "fw"
 
 /* if not defined in configuration file set to default value */
 #ifndef TEMP_ADU_WORK_DIR
@@ -125,9 +127,17 @@ update_type_t FSUpdateHandlerImpl::getUpdateType(std::string & updateTypeName)
     {
         up_type = UPDATE_APPLICATION;
     }
-    else if (updateTypeName.compare("both") == 0)
+    else if (updateTypeName.compare("common-application") == 0)
     {
-         up_type = UPDATE_COMMON;
+         up_type = UPDATE_COMMON_APPLICATION;
+    }
+    else if (updateTypeName.compare("common-firmware") == 0)
+    {
+         up_type = UPDATE_COMMON_FIRMWARE;
+    }
+    else if (updateTypeName.compare("common-both") == 0)
+    {
+         up_type = UPDATE_COMMON_BOTH;
     }
     else
     {
@@ -335,7 +345,7 @@ ADUC_Result FSUpdateHandlerImpl::Download(const tagADUC_WorkflowData* workflowDa
 
     //--------------------------------------------------
 
-    Log_Info("Download file update file to download '%s'", updateFilename.str().c_str());
+    Log_Info("Start download update file: '%s'", updateFilename.str().c_str());
 
     result = ExtensionManager::Download(entity, workflowId, workFolder, DO_RETRY_TIMEOUT_DEFAULT, nullptr);
 
@@ -344,6 +354,7 @@ ADUC_Result FSUpdateHandlerImpl::Download(const tagADUC_WorkflowData* workflowDa
 done:
     workflow_free_string(workflowId);
     workflow_free_string(workFolder);
+    workflow_free_string(updateType);
     workflow_free_file_entity(entity);
     free(updateName);
 
@@ -362,6 +373,7 @@ ADUC_Result FSUpdateHandlerImpl::Install(const tagADUC_WorkflowData* workflowDat
     ADUC_FileEntity* entity = nullptr;
     ADUC_WorkflowHandle workflowHandle = workflowData->WorkflowHandle;
     char* workFolder = workflow_get_workfolder(workflowHandle);
+    update_type_t up_type = UPDATE_UNKNOWN;
 
     Log_Info("Installing from %s", workFolder);
     std::unique_ptr<DIR, std::function<int(DIR*)>> directory(
@@ -382,16 +394,15 @@ ADUC_Result FSUpdateHandlerImpl::Install(const tagADUC_WorkflowData* workflowDat
     }
 
     {
-        std::string command = adushconst::adu_shell;
-        std::vector<std::string> args{ adushconst::update_type_opt,
-                                       adushconst::update_type_fus_update,
-                                       adushconst::update_action_opt,
-                                       adushconst::update_action_install };
-
-        std::stringstream data;
-        data << workFolder << "/" << entity->TargetFilename;
-        args.emplace_back(adushconst::target_data_opt);
-        args.emplace_back(data.str().c_str());
+        // read update type from handler properties node.
+        const char* type_name =
+            workflow_peek_update_manifest_handler_properties_string(workflowHandle, HANDLER_PROPERTIES_UPDATE_TYPE);
+        if (IsNullOrEmpty(type_name))
+        {
+            result = { .ResultCode = ADUC_Result_Failure,
+                       .ExtendedResultCode = ADUC_ERC_FSUPDATE_HANDLER_MISSING_UPDATE_TYPE_PROPERTY };
+            goto done;
+        }
 
         while (std::filesystem::exists(work_dir / "installUpdate") == false)
         {
@@ -399,7 +410,30 @@ ADUC_Result FSUpdateHandlerImpl::Install(const tagADUC_WorkflowData* workflowDat
             Log_Debug("Waiting for install command");
         }
 
-        Log_Info("Install update image: '%s'", data.str().c_str());
+        std::string command = adushconst::adu_shell;
+        std::vector<std::string> args{ adushconst::update_type_opt,
+                                       adushconst::update_type_fus_update,
+                                       adushconst::update_action_opt,
+                                       adushconst::update_action_install,
+                                       adushconst::target_data_opt};
+
+        std::stringstream data;
+        data << workFolder << "/" << entity->TargetFilename;
+        args.emplace_back(data.str().c_str());
+
+        std::string update_type_name = type_name;
+        up_type = this->getUpdateType(update_type_name);
+        if (up_type == UPDATE_APPLICATION)
+        {
+            args.emplace_back(adushconst::target_options_opt);
+            args.emplace_back(UPDATE_TYPE_APP);
+        }
+        else  if (up_type == UPDATE_FIRMWARE )
+        {
+            args.emplace_back(adushconst::target_options_opt);
+            args.emplace_back(UPDATE_TYPE_FW);
+        }
+        Log_Debug("Install update image: '%s'", data.str().c_str());
 
         std::string output;
         const int exitCode = ADUC_LaunchChildProcess(command, args, output);
@@ -408,23 +442,23 @@ ADUC_Result FSUpdateHandlerImpl::Install(const tagADUC_WorkflowData* workflowDat
             || (exitCode == static_cast<int>(UPDATER_APPLICATION_STATE::UPDATE_SUCCESSFUL))
             || (exitCode == static_cast<int>(UPDATER_FIRMWARE_AND_APPLICATION_STATE::UPDATE_SUCCESSFUL)))
         {
-            Log_Info("Install succeeded");
+            Log_Debug("Install succeeded");
             result = { ADUC_Result_Install_Success };
         }
         else
         {
-            Log_Error("Install failed, extendedResultCode = %d", exitCode);
-            if (getUpdateType() == UPDATE_FIRMWARE)
+            Log_Error("Install failed, extendedResultCode = %d, %d", exitCode, errno);
+            if (getUpdateType() == UPDATE_FIRMWARE || getUpdateType() == UPDATE_COMMON_FIRMWARE)
             {
                 result = { .ResultCode = ADUC_Result_Failure,
                            .ExtendedResultCode = ADUC_ERC_FSUPDATE_HANDLER_INSTALL_FAILURE_FIRMWARE_UPDATE };
             }
-            else if (getUpdateType() == UPDATE_APPLICATION)
+            else if (getUpdateType() == UPDATE_APPLICATION || getUpdateType() == UPDATE_COMMON_APPLICATION)
             {
                 result = { .ResultCode = ADUC_Result_Failure,
                            .ExtendedResultCode = ADUC_ERC_FSUPDATE_HANDLER_INSTALL_FAILURE_APPLICATION_UPDATE };
             }
-            else if (getUpdateType() == UPDATE_COMMON)
+            else if (getUpdateType() == UPDATE_COMMON_BOTH)
             {
                 result = { .ResultCode = ADUC_Result_Failure,
                            .ExtendedResultCode = ADUC_ERC_FSUPDATE_HANDLER_INSTALL_FAILURE_BAD_FILE_ENTITY };
@@ -603,20 +637,27 @@ ADUC_Result FSUpdateHandlerImpl::IsInstalled(const tagADUC_WorkflowData* workflo
     std::string cmd_output;
     std::string special_chars = "\n\t";
     int exitCode = 0;
-    update_type_t up_type;
+    update_type_t up_type = UPDATE_UNKNOWN;
     const std::string command(UPDATER_CLI_FULL_CMD);
     std::vector<std::string> args(1);
+    std::string update_type_name;
 
     // read update type from handler properties node.
-    std::string update_type_name =
+    const char* type_name =
         workflow_peek_update_manifest_handler_properties_string(workflowHandle, HANDLER_PROPERTIES_UPDATE_TYPE);
-
+    if (IsNullOrEmpty(type_name))
+    {
+        result.ResultCode = ADUC_Result_Failure;
+        result.ExtendedResultCode = ADUC_ERC_FSUPDATE_HANDLER_MISSING_UPDATE_TYPE_PROPERTY;
+        goto done;
+    }
+    update_type_name = type_name;
     up_type = this->getUpdateType(update_type_name);
 
     Log_Info("IsInstalled  update_type_name = %s", update_type_name.c_str());
 
     args[0] = "--firmware_version";
-    if (up_type == UPDATE_APPLICATION)
+    if (up_type == UPDATE_APPLICATION || up_type == UPDATE_COMMON_APPLICATION)
     {
         args[0] = "--application_version";
     }
@@ -669,7 +710,7 @@ ADUC_Result FSUpdateHandlerImpl::IsInstalled(const tagADUC_WorkflowData* workflo
         {
             std::string updatename("Firmware");
 
-            if (up_type == UPDATE_APPLICATION)
+            if (up_type == UPDATE_APPLICATION || up_type == UPDATE_COMMON_APPLICATION)
                 updatename = "Application";
 
             Log_Info(
@@ -678,7 +719,7 @@ ADUC_Result FSUpdateHandlerImpl::IsInstalled(const tagADUC_WorkflowData* workflo
                 installedCriteria);
             result = { ADUC_Result_IsInstalled_Installed };
             /* In case of common update application update state need to be checked too. */
-            if (up_type != UPDATE_COMMON)
+            if (up_type != UPDATE_COMMON_BOTH)
             {
                 goto done;
             }
@@ -704,7 +745,7 @@ ADUC_Result FSUpdateHandlerImpl::IsInstalled(const tagADUC_WorkflowData* workflo
         }
     }
 
-    if (up_type == UPDATE_COMMON)
+    if (up_type == UPDATE_COMMON_BOTH)
     {
         /* In case of common update, application update has to be checked too. */
         args[0] = "--application_version";

@@ -30,9 +30,11 @@ const char* updater_option_update_install = "--update_file";
 const char* updater_option_commit_update = "--commit_update";
 const char* updater_option_get_update_state = "--update_reboot_state";
 const char* updater_option_rollback_update = "--rollback_update";
+const char* updater_option_update_type = "--update_type";
 
 /**
- * @brief Runs "<updater command> --update_file <path>" command in  a child process.
+ * @brief Runs "<updater command> --update_file <path>" command in  a child process or
+ * "<updater command> --update_file <path> --update_type (app or fw)"
  *
  * @param launchArgs An adu-shell launch arguments.
  * @return A result from child process.
@@ -46,6 +48,16 @@ ADUShellTaskResult Install(const ADUShell_LaunchArguments& launchArgs)
 
     args.emplace_back(updater_option_update_install);
     args.emplace_back(launchArgs.targetData);
+
+    if (!launchArgs.targetOptions.empty())
+    {
+        if ((std::string("app").compare(launchArgs.targetOptions.front()) == 0)
+            || (std::string("fw").compare(launchArgs.targetOptions.front()) == 0))
+        {
+            args.emplace_back(updater_option_update_type);
+            args.emplace_back(launchArgs.targetOptions.front());
+        }
+    }
 
     taskResult.SetExitStatus(ADUC_LaunchChildProcess(updater_command, args, taskResult.Output()));
 
