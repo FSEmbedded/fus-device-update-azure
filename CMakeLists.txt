@@ -1,5 +1,11 @@
 cmake_minimum_required (VERSION 3.5)
 
+# Check if CMake is installed
+find_program(CMAKE_EXECUTABLE NAMES cmake)
+if(NOT CMAKE_EXECUTABLE)
+    message(FATAL_ERROR "CMake must be installed on the system!")
+endif()
+
 if (WIN32)
     #
     # Configure vcpkg
@@ -58,6 +64,7 @@ message (STATUS "CMAKE_CXX_COMPILER: ${CMAKE_CXX_COMPILER}")
 message (STATUS "CMAKE_BINARY_DIR: ${CMAKE_BINARY_DIR}")
 message (STATUS "CMAKE_SOURCE_DIR: ${CMAKE_SOURCE_DIR}")
 message (STATUS "CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
+message (STATUS "CMake version: ${CMAKE_VERSION}")
 message (STATUS)
 
 # Tell CMake where to find our custom CMake module files.
@@ -318,7 +325,15 @@ set (
     "AducIotAgent${CMAKE_EXECUTABLE_SUFFIX}"
     CACHE STRING "The filename of the ADU Agent binary.")
 
-cmake_path (SET ADUC_AGENT_FILEPATH NORMALIZE "${ADUC_AGENT_FOLDER}/${ADUC_AGENT_FILENAME}")
+if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.20")
+    cmake_path (SET ADUC_AGENT_FILEPATH NORMALIZE "${ADUC_AGENT_FOLDER}/${ADUC_AGENT_FILENAME}")
+else()
+    get_filename_component (
+        ADUC_AGENT_FILEPATH
+        "${ADUC_AGENT_FOLDER}/${ADUC_AGENT_FILENAME}"
+        ABSOLUTE
+        "/")
+endif()
 
 set (
     DIAGNOSTICS_CONFIG_FILE
@@ -345,7 +360,16 @@ set (
     "adu-shell${CMAKE_EXECUTABLE_SUFFIX}"
     CACHE STRING "Filename of adu-shell.")
 
-cmake_path (SET ADUSHELL_FILE_PATH NORMALIZE "${ADUSHELL_FOLDER}/${ADUSHELL_FILENAME}")
+if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.20")
+    cmake_path (SET ADUSHELL_FILE_PATH NORMALIZE "${ADUSHELL_FOLDER}/${ADUSHELL_FILENAME}")
+else()
+    get_filename_component (
+        ADUSHELL_FILE_PATH
+        "${ADUSHELL_FOLDER}/${ADUSHELL_FILENAME}"
+        ABSOLUTE
+        "/")
+endif()
+
 
 set (
     ADUSHELL_FILE_PATH
@@ -437,14 +461,34 @@ set (
 # Paths for the Folders
 
 # Error Code Generator Script
-cmake_path (SET ADUC_PATH_TO_ERROR_CODE_GENERATOR_SCRIPT NORMALIZE
-            "${ADUC_ERROR_CODE_JSON_FOLDER_PATH}/error_code_defs_generator.py")
+if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.20")
+    cmake_path (SET ADUC_PATH_TO_ERROR_CODE_GENERATOR_SCRIPT NORMALIZE
+                "${ADUC_ERROR_CODE_JSON_FOLDER_PATH}/error_code_defs_generator.py")
 
-cmake_path (SET ADUC_PATH_TO_ERROR_CODE_JSON_FILE NORMALIZE
-            "${ADUC_ERROR_CODE_JSON_FOLDER_PATH}/${ADUC_ERROR_CODE_JSON_FILENAME}")
+    cmake_path (SET ADUC_PATH_TO_ERROR_CODE_JSON_FILE NORMALIZE
+                "${ADUC_ERROR_CODE_JSON_FOLDER_PATH}/${ADUC_ERROR_CODE_JSON_FILENAME}")
 
-cmake_path (SET ADUC_GENERATED_ERROR_CODE_FILE_PATH NORMALIZE
-            "${ADUC_GENERATED_ERROR_CODE_FOLDER_PATH}/${ADUC_ERROR_CODE_DEFS_FILENAME}")
+    cmake_path (SET ADUC_GENERATED_ERROR_CODE_FILE_PATH NORMALIZE
+                "${ADUC_GENERATED_ERROR_CODE_FOLDER_PATH}/${ADUC_ERROR_CODE_DEFS_FILENAME}")
+else()
+    get_filename_component (
+        ADUC_PATH_TO_ERROR_CODE_GENERATOR_SCRIPT
+        "${ADUC_ERROR_CODE_JSON_FOLDER_PATH}/error_code_defs_generator.py"
+        ABSOLUTE
+        "/")
+    
+    get_filename_component (
+        ADUC_PATH_TO_ERROR_CODE_JSON_FILE
+        "${ADUC_ERROR_CODE_JSON_FOLDER_PATH}/${ADUC_ERROR_CODE_JSON_FILENAME}"
+        ABSOLUTE
+        "/")
+
+    get_filename_component (
+        ADUC_GENERATED_ERROR_CODE_FILE_PATH
+        "${ADUC_GENERATED_ERROR_CODE_FOLDER_PATH}/${ADUC_ERROR_CODE_DEFS_FILENAME}"
+        ABSOLUTE
+        "/")
+endif()
 
 #######
 # BEGIN Delta Downloader Handler Source Update Cache Configurations
@@ -485,15 +529,32 @@ option (ADUC_ENABLE_SRVC_E2E_TESTING "Enable service side test agent settings" O
 ### End CMake Options
 
 # Construct the absolute path to the adu configuration file.
-cmake_path (SET ADUC_CONF_FILE_PATH NORMALIZE "${ADUC_CONF_FOLDER}/${ADUC_CONF_FILE}")
+if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.20")
+    cmake_path (SET ADUC_CONF_FILE_PATH NORMALIZE "${ADUC_CONF_FOLDER}/${ADUC_CONF_FILE}")
+else()
+    get_filename_component (
+        ADUC_CONF_FILE_PATH
+        "${ADUC_CONF_FOLDER}/${ADUC_CONF_FILE}"
+        ABSOLUTE
+        "/")
+endif()
+
 set (
     ADUC_CONF_FILE_PATH
     "${ADUC_CONF_FILE_PATH}"
     CACHE STRING "Path to the ADU configuration file.")
 
 # Construct the absolute path to the adu diagnostics configuration file
-cmake_path (SET DIAGNOSTICS_CONFIG_FILE_PATH NORMALIZE
-            "${ADUC_CONF_FOLDER}/${DIAGNOSTICS_CONFIG_FILE}")
+if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.20")
+    cmake_path (SET DIAGNOSTICS_CONFIG_FILE_PATH NORMALIZE
+                "${ADUC_CONF_FOLDER}/${DIAGNOSTICS_CONFIG_FILE}")
+else()
+    get_filename_component (
+        DIAGNOSTICS_CONFIG_FILE_PATH
+        "${ADUC_CONF_FOLDER}/${DIAGNOSTICS_CONFIG_FILE}"
+        ABSOLUTE
+        "/")
+endif()
 
 set (
     DIAGNOSTICS_CONFIG_FILE_PATH
