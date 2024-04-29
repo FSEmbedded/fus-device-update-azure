@@ -13,10 +13,6 @@ set (agent_apt_c_files ./src/aptget_tasks.cpp)
 
 set (agent_swupdate_c_files ./src/swupdate_tasks.cpp)
 
-set (agent_fus_firmware_c_files ./src/fusfirmware_tasks.cpp)
-
-set (agent_fus_application_c_files ./src/fusapplication_tasks.cpp)
-
 set (agent_fus_update_c_files ./src/fusupdate_tasks.cpp)
 
 set (agent_script_c_files ./src/script_tasks.cpp)
@@ -36,9 +32,9 @@ string (
             ${ADUC_STEP_HANDLERS})
 
 # Support all microsoft/* update types by default.
-set (source_files ${agent_c_files} ${agent_apt_c_files} ${agent_script_c_files} ${agent_fus_firmware_c_files} ${agent_fus_application_c_files} ${agent_fus_update_c_files})
+set (source_files ${agent_c_files} ${agent_apt_c_files} ${agent_script_c_files} ${agent_fus_update_c_files})
 
-set (adushell_def ADUSHELL_SWUPDATE="yes" ADUSHELL_APT="yes" ADUSHELL_SCRIPT="yes" ADUSHELL_FUS_FIRMWARE="yes" ADUSHELL_FUS_APPLICATION="yes" ADUSHELL_FUS_UPDATE="yes")
+set (adushell_def ADUSHELL_SWUPDATE="yes" ADUSHELL_APT="yes" ADUSHELL_SCRIPT="yes" ADUSHELL_FUS_UPDATE="yes")
 
 add_executable (${target_name} ${source_files})
 

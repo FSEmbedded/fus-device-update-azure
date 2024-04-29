@@ -264,8 +264,6 @@ int ADUShell_Dowork(const ADUShell_LaunchArguments& launchArgs)
             { adushconst::update_type_common, CommonTasks::DoCommonTask },
             { adushconst::update_type_microsoft_apt, AptGetTasks::DoAptGetTask },
             { adushconst::update_type_microsoft_script, ScriptTasks::DoScriptTask },
-            { adushconst::update_type_fus_firmware, FUSFirmwareUpdateTasks::DoFUSFirmwareUpdateTask },
-            { adushconst::update_type_fus_application, FUSApplicationUpdateTasks::DoFUSApplicationUpdateTask },
             { adushconst::update_type_fus_update, FUSUpdateTasks::DoFUSUpdateTask }
         };
 
