@@ -115,28 +115,30 @@ ADUShellTaskResult Cancel(const ADUShell_LaunchArguments& launchArgs)
 ADUShellTaskResult Execute(const ADUShell_LaunchArguments& launchArgs)
 {
     ADUShellTaskResult taskResult;
-
-    Log_Info("Get current install status");
-
     std::vector<std::string> args;
 
-    if (launchArgs.targetOptions.size() != 1)
+    if (launchArgs.targetOptions.size() > 2)
     {
-        Log_Error("Not exact one target option is set");
+        Log_Error("Wrong number of target options.");
         taskResult.SetExitStatus(EXIT_FAILURE);
         return taskResult;
     }
 
-    if (launchArgs.targetOptions.at(0) != std::string("update_state"))
+    for (const std::string& option : launchArgs.targetOptions)
     {
-        Log_Error("Target option is not \"update_state\": '%s'", launchArgs.targetOptions.at(0));
-        taskResult.SetExitStatus(EXIT_FAILURE);
-        return taskResult;
+        Log_Debug("args: %s", option.c_str());
+        args.emplace_back(option);
     }
-
-    args.emplace_back(updater_option_get_update_state);
 
     taskResult.SetExitStatus(ADUC_LaunchChildProcess(updater_command, args, taskResult.Output()));
+
+    for (const std::string& option : launchArgs.targetOptions)
+    {
+        if(option.compare("--firmware_version") == 0)
+            printf("--firmware_version %s", taskResult.Output().c_str());
+        if(option.compare("--application_version") == 0)
+            printf("--application_version %s", taskResult.Output().c_str());
+    }
 
     return taskResult;
 }
