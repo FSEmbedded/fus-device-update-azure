@@ -1,8 +1,9 @@
 /**
- * @file calloc_wrapper.h
+ * @file calloc_wrapper.hpp
  * @brief Defines calloc_wrapper class, which performs RAII for malloc'd pointers.
  *
- * @copyright Copyright (c) 2019, Microsoft Corp.
+ * @copyright Copyright (c) Microsoft Corporation.
+ * Licensed under the MIT License.
  */
 
 #ifndef ADUC_CALLOC_WRAPPER_HPP
@@ -49,6 +50,26 @@ public:
     const T* get() const
     {
         return m_ptr;
+    }
+
+    /**
+     * @brief Get the wrapped object for arrow syntax.
+     *
+     * @return const T* Pointer to wrapped object.
+     */
+    const T* operator->() const
+    {
+        return m_ptr;
+    }
+
+    /**
+     * @brief Whether underlying pointer is nullptr or not.
+     *
+     * @return true if m_ptr is nullptr.
+     */
+    bool is_null() const
+    {
+        return m_ptr == nullptr;
     }
 
     /**

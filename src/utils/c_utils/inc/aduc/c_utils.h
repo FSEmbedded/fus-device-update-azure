@@ -2,8 +2,10 @@
  * @file c_utils.h
  * @brief Helpers and macros for C code.
  *
- * @copyright Copyright (c) 2019, Microsoft Corp.
+ * @copyright Copyright (c) Microsoft Corporation.
+ * Licensed under the MIT License.
  */
+
 #ifndef ADUC_C_UTILS_H
 #define ADUC_C_UTILS_H
 
@@ -28,6 +30,31 @@
  */
 #ifndef UNREFERENCED_PARAMETER
 #    define UNREFERENCED_PARAMETER(param) (void)(param)
+#endif
+
+/**
+ * @brief Defines the __attribute__ value for non GNUC compilers
+ */
+#ifndef __GNUC__
+#    define __attribute__(x)
+#endif
+
+/**
+ * @brief Defines an export declspec for exporting methods.
+ */
+#if defined(WIN32)
+#    define EXPORTED_METHOD __declspec(dllexport)
+#else
+#    define EXPORTED_METHOD
+#endif
+
+/**
+ * @brief Compile-time assertion that some boolean expression @param e is true.
+ */
+#ifndef STATIC_ASSERT
+
+#    define STATIC_ASSERT(e) typedef char __STATIC_ASSERT__[(e) ? 1 : -1] __attribute__((unused))
+
 #endif
 
 #endif // ADUC_C_UTILS_H

@@ -2,13 +2,13 @@
  * @file eis_utils_ut.cpp
  * @brief Unit Tests for eis_utils library
  *
- * @copyright Copyright (c) 2019, Microsoft Corp.
+ * @copyright Copyright (c) Microsoft Corporation.
+ * Licensed under the MIT License.
  */
 #include "eis_utils.h"
 #include "umock_c/umock_c.h"
 #include <aduc/adu_types.h>
 #include <aduc/c_utils.h>
-#include <aduc/calloc_wrapper.hpp>
 #include <azure_c_shared_utility/crt_abstractions.h>
 #include <catch2/catch.hpp>
 #include <cstring>
@@ -20,8 +20,6 @@
 #define ENABLE_MOCKS
 #include "eis_coms.h"
 #undef ENABLE_MOCKS
-
-using ADUC::StringUtils::cstr_wrapper;
 
 //
 // UMock Enum Type Definitions
@@ -45,7 +43,7 @@ IMPLEMENT_UMOCK_C_ENUM_TYPE(
 //
 
 // clang-format off
-static const char* validDeviceSasIdentityResponseStr = 
+static const char* validDeviceSasIdentityResponseStr =
     R"({)"
         R"("type":"aziot",)"
         R"("spec":{)"
@@ -58,7 +56,7 @@ static const char* validDeviceSasIdentityResponseStr =
         R"(})"
     R"(})";
 
-static const char* validDeviceX509IdentityResponseStr = 
+static const char* validDeviceX509IdentityResponseStr =
     R"({)"
         R"("type":"aziot",)"
         R"("spec":{)"
@@ -72,7 +70,7 @@ static const char* validDeviceX509IdentityResponseStr =
         R"(})"
     R"(})";
 
-static const char* validModuleSasIdentityResponseStr = 
+static const char* validModuleSasIdentityResponseStr =
     R"({)"
         R"("type":"aziot",)"
         R"("spec":{)"
@@ -103,7 +101,7 @@ static const char* validModuleX509IdentityResponseStr =
 
 static const char* validSignatureResponseStr =
     R"({)"
-        R"("signature":"hIuFfERqcDBnu84EwVlF01JfiaRvH6A20dMWQW6T4fg=")"
+        R"("signature":"notARealSig=")"
     R"(})";
 
 static const char* validCertificateResponseStr =
@@ -193,7 +191,7 @@ TEST_CASE_METHOD(GlobalMockHookTestCaseFixture, "RequestConnectionStringFromEISW
                               << "DeviceId=user-test-device;"
                               << "SharedAccessSignature=SharedAccessSignature "
                               << "sr=foo.example-devices.net/devices/user-test-device&"
-                              << "sig=hIuFfERqcDBnu84EwVlF01JfiaRvH6A20dMWQW6T4fg%3d&"
+                              << "sig=notARealSig%3d&"
                               << "se=" << expiry;
 
         // Note: These do not need to be freed! They are returned by the RequestSignature/IdentityFromEIS
@@ -273,7 +271,7 @@ TEST_CASE_METHOD(GlobalMockHookTestCaseFixture, "RequestConnectionStringFromEISW
                               << "SharedAccessSignature=SharedAccessSignature "
                               << "sr=foo.example-devices.net/devices/user-test-device"
                               << "/modules/user-test-module&"
-                              << "sig=hIuFfERqcDBnu84EwVlF01JfiaRvH6A20dMWQW6T4fg%3d&"
+                              << "sig=notARealSig%3d&"
                               << "se=" << expiry;
 
         // Note: These do not need to be freed! They are returned by the RequestSignature/IdentityFromEIS

@@ -1,3 +1,6 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
 # Find cmake module for the iothub_client library and headers
 # Exports IotHubClient::iothub_client target
 
@@ -27,7 +30,6 @@ if (IotHubClient_FOUND)
         set_target_properties (
             IotHubClient::iothub_client
             PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${IotHubClient_INCLUDE_DIRS}"
-
                        INTERFACE_LINK_LIBRARIES "${IotHubClient_LIBRARIES}")
     endif ()
 endif ()

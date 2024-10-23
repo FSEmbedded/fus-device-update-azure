@@ -1,13 +1,16 @@
 #!/bin/bash
 
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
 # Ensure that getopt starts from first option if ". <script.sh>" was used.
 OPTIND=1
 
 # Ensure we dont end the user's terminal session if invoked from source (".").
 if [[ $0 != "${BASH_SOURCE[0]}" ]]; then
-    ret=return
+    ret='return'
 else
-    ret=exit
+    ret='exit'
 fi
 
 print_help() {

@@ -2,57 +2,166 @@
  * @file hash_utils.c
  * @brief Implements utilities for working with hashes
  *
- * @copyright Copyright (c) 2019, Microsoft Corporation.
+ * @copyright Copyright (c) Microsoft Corporation.
+ * Licensed under the MIT License.
  */
 #include "aduc/hash_utils.h"
 
 #include <stdio.h> // for FILE
 #include <stdlib.h> // for calloc
-#include <strings.h> // for strcasecmp
+
+#include <aducpal/strings.h> // strcasecmp
 
 #include <azure_c_shared_utility/azure_base64.h>
 #include <azure_c_shared_utility/buffer_.h>
+#include <azure_c_shared_utility/crt_abstractions.h> // for mallocAndStrcpy_s
 #include <azure_c_shared_utility/sha.h>
 
 #include <aduc/logging.h>
 
 /**
- * @brief Helper function gets the calculated hash from the @p context, compares it to @p hashBase64, and returns the appropraite value
+ * @brief Helper function gets the calculated hash from the @p context, compares it to @p hashBase64, and returns the appropriate value
  * @param context Context in which the hash was calculated and stored
- * @param hashBase64 The expected hash from the context
+ * @param hashBase64 The expected hash from the context. If NULL, skip hashes comparison.
  * @param algorithm the algorithm used to calculate the hash
+ * @param outputHash an optional output buffer for computed hash. Caller must call free() to deallocate the buffer when done.
  * @returns bool True if the hash is valid and equals @p hashBase64
  */
-static bool GetResultAndCompareHashes(USHAContext* context, const char* hashBase64, SHAversion algorithm)
+static bool GetResultAndCompareHashes(
+    USHAContext* context, const char* hashBase64, SHAversion algorithm, bool suppressErrorLog, char** outputHash)
 {
+    bool success = false;
     // "USHAHashSize(algorithm)" is more precise, but requires a variable length array, or heap allocation.
     uint8_t buffer_hash[USHAMaxHashSize];
+    STRING_HANDLE encoded_file_hash = NULL;
 
     if (USHAResult(context, (uint8_t*)buffer_hash) != 0)
     {
-        Log_Error("Error in SHA Result, SHAversion: %d", algorithm);
-        return false;
+        if (!suppressErrorLog)
+        {
+            Log_Error("Error in SHA Result, SHAversion: %d", algorithm);
+        }
+        goto done;
     }
 
-    STRING_HANDLE encoded_file_hash = Azure_Base64_Encode_Bytes((unsigned char*)buffer_hash, USHAHashSize(algorithm));
+    encoded_file_hash = Azure_Base64_Encode_Bytes((unsigned char*)buffer_hash, (size_t)USHAHashSize(algorithm));
     if (encoded_file_hash == NULL)
     {
-        Log_Error("Error in Base64 Encoding");
-        return false;
+        if (!suppressErrorLog)
+        {
+            Log_Error("Error in Base64 Encoding");
+        }
+        goto done;
     }
 
-    const bool hashMatches = strcmp(hashBase64, STRING_c_str(encoded_file_hash)) == 0;
-
-    STRING_delete(encoded_file_hash);
-    encoded_file_hash = NULL;
+    const bool hashMatches = ((hashBase64 == NULL) || (strcmp(hashBase64, STRING_c_str(encoded_file_hash)) == 0));
 
     if (!hashMatches)
     {
-        Log_Error(
-            "Invalid Hash, Expect: %s, Result: %s, SHAversion: %d",
-            hashBase64,
-            STRING_c_str(encoded_file_hash),
-            algorithm);
+        if (!suppressErrorLog)
+        {
+            Log_Error(
+                "Invalid Hash, Expect: %s, Result: %s, SHAversion: %d",
+                hashBase64,
+                STRING_c_str(encoded_file_hash),
+                algorithm);
+        }
+        goto done;
+    }
+
+    if (outputHash != NULL)
+    {
+        if (mallocAndStrcpy_s(outputHash, STRING_c_str(encoded_file_hash)) != 0)
+        {
+            if (!suppressErrorLog)
+            {
+                Log_Error("Cannot allocate output buffer and copy hash.");
+            }
+            goto done;
+        }
+    }
+
+    success = true;
+
+done:
+    STRING_delete(encoded_file_hash);
+    return success;
+}
+
+bool ADUC_HashUtils_IsValidHashAlgorithm(SHAversion sha)
+{
+    return sha >= SHA256;
+}
+
+static bool ADUC_HashUtils_GetIndexStrongestValidHash(
+    const ADUC_Hash* hashes, size_t hashCount, size_t* outIndexStrongestAlgorithm, SHAversion* outBestShaVersion)
+{
+    if (outIndexStrongestAlgorithm == NULL || outBestShaVersion == NULL)
+    {
+        return false;
+    }
+
+    int strongestIndex = -1; // Assume hashes array is not sorted by strength ordering.
+    SHAversion curBestAlg = SHA1;
+
+    for (int i = 0; i < hashCount; ++i)
+    {
+        SHAversion algVersion = SHA1;
+        char* hashType = ADUC_HashUtils_GetHashType(hashes, hashCount, (size_t)i);
+        if (!ADUC_HashUtils_GetShaVersionForTypeString(hashType, &algVersion))
+        {
+            Log_Error("Unsupported algorithm: %s", hashType);
+            return false;
+        }
+
+        // Just because it's supported by the underlying library does not mean
+        // it's valid for file digests (e.g. SHA1 is not valid).
+        if (!ADUC_HashUtils_IsValidHashAlgorithm(algVersion))
+        {
+            Log_Warn("Invalid hash alg: %s", hashType);
+            continue;
+        }
+
+        if (algVersion > curBestAlg)
+        {
+            strongestIndex = i;
+            curBestAlg = algVersion;
+        }
+    }
+
+    if (strongestIndex != (size_t)-1)
+    {
+        *outIndexStrongestAlgorithm = (size_t)strongestIndex;
+        *outBestShaVersion = curBestAlg;
+        return true;
+    }
+
+    return false;
+}
+
+/**
+ * @brief For the given array of ADUC_Hash, it will verify that the hash of the file contents matches the strongest hash in the array.
+ *
+ * @param filePath The path to the file with contents to hash.
+ * @param hashes The array of ADUC_Hash objects.
+ * @param hashCount The length of the array.
+ * @return bool true if the hash with the strongest algorithm matches the hash of the file at the given path.
+ */
+bool ADUC_HashUtils_VerifyWithStrongestHash(const char* filePath, const ADUC_Hash* hashes, size_t hashCount)
+{
+    size_t indexStrongestAlgorithm = 0;
+    SHAversion bestShaVersion = SHA256;
+    if (!ADUC_HashUtils_GetIndexStrongestValidHash(hashes, hashCount, &indexStrongestAlgorithm, &bestShaVersion))
+    {
+        // There is no hash with a valid algorithm.
+        return false;
+    }
+
+    Log_Debug("Best hash index %d", indexStrongestAlgorithm);
+
+    char* hashValue = ADUC_HashUtils_GetHashValue(hashes, hashCount, indexStrongestAlgorithm);
+    if (!ADUC_HashUtils_IsValidFileHash(filePath, hashValue, bestShaVersion, false))
+    {
         return false;
     }
 
@@ -63,18 +172,29 @@ static bool GetResultAndCompareHashes(USHAContext* context, const char* hashBase
  * @brief Checks if the hash of the file at @p path matches @p hashBase64
  *
  * @param path The path to the file to check
- * @param hashBase64 The expected hash of the file at @p path
  * @param algorithm The hashing algorithm to use to calculate the hash.
- * @return bool True if the hash is valid and matches @p hashBase64
+ * @param hash [out] The pointer to output buffer. Caller must call free() when done with the returned buffer.
+ * @return bool True if the hash data is successfully generated.
  */
-_Bool ADUC_HashUtils_IsValidFileHash(const char* path, const char* hashBase64, SHAversion algorithm)
+bool ADUC_HashUtils_GetFileHash(const char* path, SHAversion algorithm, char** hash)
 {
-    _Bool success = false;
+    bool success = false;
+    FILE* file = NULL;
 
-    FILE* file = fopen(path, "rb");
+    if (hash == NULL)
+    {
+        Log_Error("Invalid input. 'hash' is NULL.");
+        goto done;
+    }
+
+    *hash = NULL;
+
+    file = fopen(path, "rb");
     if (file == NULL)
     {
-        Log_Error("No such file or directory: %s", path);
+        // Sometime we call this function to check whether the file is already exist.
+        // So, log info here instead of error.
+        Log_Info("No such file or directory: %s", path);
         goto done;
     }
 
@@ -93,23 +213,150 @@ _Bool ADUC_HashUtils_IsValidFileHash(const char* path, const char* hashBase64, S
         const size_t readSize = fread(buffer, sizeof(buffer[0]), ARRAY_SIZE(buffer), file);
         if (readSize == 0)
         {
+            if (ferror(file))
+            {
+                Log_Error("Error reading file content.");
+                goto done;
+            }
+
+            // At the end of file. We're done here.
             break;
         }
 
-        if (USHAInput(&context, buffer, readSize) != 0)
+        if (USHAInput(&context, buffer, (unsigned int)readSize) != 0)
         {
             Log_Error("Error in SHA Input, SHAversion: %d", algorithm);
             goto done;
         };
     }
 
-    success = GetResultAndCompareHashes(&context, hashBase64, algorithm);
+    success = GetResultAndCompareHashes(&context, NULL, algorithm, true, hash);
+
+done:
+
+    if (file != NULL)
+    {
+        fclose(file);
+    }
+
+    return success;
+}
+
+/**
+ * @brief Get file hash type at specified index.
+ * @param hashArray The ADUC_Hash array.
+ * @param arraySize Size of array.
+ * @param hashIndex Index of the hash to return.
+ *
+ * @return Hash type if succeeded. Otherwise, return NULL.
+ */
+char* ADUC_HashUtils_GetHashType(const ADUC_Hash* hashArray, size_t arraySize, size_t index)
+{
+    if (index >= arraySize)
+    {
+        return NULL;
+    }
+
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic)
+    return hashArray[index].type;
+}
+
+/**
+ * @brief Get file hash value at specified index.
+ * @param hashArray The ADUC_Hash array.
+ * @param arraySize Size of array.
+ * @param hashIndex Index of the hash to return.
+ *
+ * @return Hash value if succeeded. Otherwise, return NULL.
+ */
+char* ADUC_HashUtils_GetHashValue(const ADUC_Hash* hashArray, size_t arraySize, size_t index)
+{
+    if (index >= arraySize)
+    {
+        return NULL;
+    }
+
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic)
+    return hashArray[index].value;
+}
+
+/**
+ * @brief Checks if the hash of the file at @p path matches @p hashBase64
+ *
+ * @param path The path to the file to check
+ * @param hashBase64 The expected hash of the file at @p path
+ * @param algorithm The hashing algorithm to use to calculate the hash.
+ * @param suppressErrorLog A boolean indicates whether to log error message inside this function.
+ * @return bool True if the hash is valid and matches @p hashBase64
+ */
+bool ADUC_HashUtils_IsValidFileHash(
+    const char* path, const char* hashBase64, SHAversion algorithm, bool suppressErrorLog)
+{
+    bool success = false;
+
+    FILE* file = fopen(path, "rb");
+    if (file == NULL)
+    {
+        if (!suppressErrorLog)
+        {
+            Log_Error("Cannot open file: %s", path);
+        }
+        goto done;
+    }
+
+    USHAContext context;
+
+    if (USHAReset(&context, algorithm) != 0)
+    {
+        if (!suppressErrorLog)
+        {
+            Log_Error("Error in SHA Reset, SHAversion: %d", algorithm);
+        }
+        goto done;
+    };
+
+    // Repeatedly read and hash chunks of the file
+    while (!feof(file))
+    {
+        uint8_t buffer[USHA_Max_Message_Block_Size];
+        const size_t readSize = fread(buffer, sizeof(buffer[0]), ARRAY_SIZE(buffer), file);
+        if (readSize == 0)
+        {
+            if (ferror(file))
+            {
+                if (!suppressErrorLog)
+                {
+                    Log_Error("Error reading file content.");
+                }
+                goto done;
+            }
+
+            // At the end of file. We're done here.
+            break;
+        }
+
+        if (USHAInput(&context, buffer, (unsigned int)readSize) != 0)
+        {
+            if (!suppressErrorLog)
+            {
+                Log_Error("Error in SHA Input, SHAversion: %d", algorithm);
+            }
+            goto done;
+        };
+    }
+
+    success = GetResultAndCompareHashes(&context, hashBase64, algorithm, suppressErrorLog, NULL /* outputHash */);
     if (!success)
     {
         goto done;
     }
 
 done:
+    if (file != NULL)
+    {
+        fclose(file);
+    }
+
     return success;
 }
 
@@ -121,7 +368,7 @@ done:
  * @param hashBase64 The expected hash of the buffer @p buffer
  * @return bool True if the hash is valid and matches @p hashBase64
  */
-_Bool ADUC_HashUtils_IsValidBufferHash(
+bool ADUC_HashUtils_IsValidBufferHash(
     const uint8_t* buffer, size_t bufferLen, const char* hashBase64, SHAversion algorithm)
 {
     USHAContext context;
@@ -132,13 +379,13 @@ _Bool ADUC_HashUtils_IsValidBufferHash(
         return false;
     }
 
-    if (USHAInput(&context, buffer, bufferLen) != 0)
+    if (USHAInput(&context, buffer, (unsigned int)bufferLen) != 0)
     {
         Log_Error("Error in SHA Input, SHAversion: %d", algorithm);
         return false;
     }
 
-    return GetResultAndCompareHashes(&context, hashBase64, algorithm);
+    return GetResultAndCompareHashes(&context, hashBase64, algorithm, true, NULL);
 }
 
 /**
@@ -147,27 +394,27 @@ _Bool ADUC_HashUtils_IsValidBufferHash(
  * @param algorithm the destination to store the SHAversion
  * @returns True if a hash type was found, false if it was not
  */
-_Bool ADUC_HashUtils_GetShaVersionForTypeString(const char* hashTypeStr, SHAversion* algorithm)
+bool ADUC_HashUtils_GetShaVersionForTypeString(const char* hashTypeStr, SHAversion* algorithm)
 {
     bool success = true;
 
-    if (strcasecmp(hashTypeStr, "sha1") == 0)
+    if (ADUCPAL_strcasecmp(hashTypeStr, "sha1") == 0)
     {
         *algorithm = SHA1;
     }
-    else if (strcasecmp(hashTypeStr, "sha224") == 0)
+    else if (ADUCPAL_strcasecmp(hashTypeStr, "sha224") == 0)
     {
         *algorithm = SHA224;
     }
-    else if (strcasecmp(hashTypeStr, "sha256") == 0)
+    else if (ADUCPAL_strcasecmp(hashTypeStr, "sha256") == 0)
     {
         *algorithm = SHA256;
     }
-    else if (strcasecmp(hashTypeStr, "sha384") == 0)
+    else if (ADUCPAL_strcasecmp(hashTypeStr, "sha384") == 0)
     {
         *algorithm = SHA384;
     }
-    else if (strcasecmp(hashTypeStr, "sha512") == 0)
+    else if (ADUCPAL_strcasecmp(hashTypeStr, "sha512") == 0)
     {
         *algorithm = SHA512;
     }
@@ -177,4 +424,82 @@ _Bool ADUC_HashUtils_GetShaVersionForTypeString(const char* hashTypeStr, SHAvers
     }
 
     return success;
+}
+
+/**
+ * @brief Free the ADUC_Hash struct members
+ * @param hash a pointer to an ADUC_Hash
+ */
+void ADUC_Hash_UnInit(ADUC_Hash* hash)
+{
+    free(hash->value);
+    hash->value = NULL;
+
+    free(hash->type);
+    hash->type = NULL;
+}
+
+/**
+ * @brief Allocates the memory for the ADUC_Hash struct member values
+ * @param hash A pointer to an ADUC_Hash struct whose member values will be allocated
+ * @param hashValue The value of the hash
+ * @param hashType The type of the hash
+ * @returns True if successfully allocated, False if failure
+ */
+bool ADUC_Hash_Init(ADUC_Hash* hash, const char* hashValue, const char* hashType)
+{
+    bool success = false;
+
+    if (hash == NULL)
+    {
+        return false;
+    }
+
+    if (hashValue == NULL || hashType == NULL)
+    {
+        Log_Error("Invalid call to ADUC_Hash_Init with hashValue %s and hashType %s", hashValue, hashType);
+        return false;
+    }
+
+    hash->value = NULL;
+    hash->type = NULL;
+
+    if (mallocAndStrcpy_s(&(hash->value), hashValue) != 0)
+    {
+        goto done;
+    }
+
+    if (mallocAndStrcpy_s(&(hash->type), hashType) != 0)
+    {
+        goto done;
+    }
+
+    success = true;
+
+done:
+
+    if (!success)
+    {
+        ADUC_Hash_UnInit(hash);
+    }
+
+    return success;
+}
+
+/**
+ * @brief Frees an array of ADUC_Hashes of size @p hashCount
+ * @param hashCount the size of @p hashArray
+ * @param hashArray a pointer to an array of ADUC_Hash structs
+ */
+void ADUC_Hash_FreeArray(size_t hashCount, ADUC_Hash* hashArray)
+{
+    if (hashArray != NULL)
+    {
+        for (size_t hash_index = 0; hash_index < hashCount; ++hash_index)
+        {
+            ADUC_Hash* hashEntity = hashArray + hash_index;
+            ADUC_Hash_UnInit(hashEntity);
+        }
+        free(hashArray);
+    }
 }

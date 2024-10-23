@@ -2,7 +2,8 @@
  * @file string_utils_ut.cpp
  * @brief Unit Tests for c_utils library
  *
- * @copyright Copyright (c) 2019, Microsoft Corp.
+ * @copyright Copyright (c) Microsoft Corporation.
+ * Licensed under the MIT License.
  */
 #include <catch2/catch.hpp>
 #include <vector>
@@ -256,5 +257,52 @@ TEST_CASE("Split")
         CHECK(v2[1].empty());
         CHECK(v2[2].empty());
         CHECK(v2[3].empty());
+    }
+}
+
+TEST_CASE("RemoveSurrounding")
+{
+    const char c = '\'';
+
+    SECTION("empty")
+    {
+        std::string s{ "" };
+        ADUC::StringUtils::RemoveSurrounding(s, c);
+        CHECK_THAT(s, Equals(""));
+    }
+
+    SECTION("not surrounded")
+    {
+        std::string s{ "abc" };
+        ADUC::StringUtils::RemoveSurrounding(s, c);
+        CHECK_THAT(s, Equals("abc"));
+    }
+
+    SECTION("leading")
+    {
+        std::string s{ "'abc" };
+        ADUC::StringUtils::RemoveSurrounding(s, c);
+        CHECK_THAT(s, Equals("'abc"));
+    }
+
+    SECTION("trailing")
+    {
+        std::string s{ "abc'" };
+        ADUC::StringUtils::RemoveSurrounding(s, c);
+        CHECK_THAT(s, Equals("abc'"));
+    }
+
+    SECTION("leading and trailing")
+    {
+        std::string s{ "'abc'" };
+        ADUC::StringUtils::RemoveSurrounding(s, c);
+        CHECK_THAT(s, Equals("abc"));
+    }
+
+    SECTION("nested")
+    {
+        std::string s{ "''abc''" };
+        ADUC::StringUtils::RemoveSurrounding(s, c);
+        CHECK_THAT(s, Equals("'abc'"));
     }
 }

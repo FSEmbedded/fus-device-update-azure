@@ -2,7 +2,8 @@
  * @file string_c_utils.c
  * @brief Implementation of string utilities for C code.
  *
- * @copyright Copyright (c) 2019, Microsoft Corp.
+ * @copyright Copyright (c) Microsoft Corporation.
+ * Licensed under the MIT License.
  */
 #include "aduc/string_c_utils.h"
 #include "aduc/c_utils.h"
@@ -15,77 +16,11 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <unistd.h>
 
-/**
- * @brief Maximum length for the output string of ADUC_StringFormat()
- */
-#define ADUC_STRING_FORMAT_MAX_LENGTH 512
+#include <aducpal/unistd.h> // open, read, close
 
-/**
- * @brief Read a value from a delimited file and return the value found.
- * The file is in form "key=value", and keys are case sensitive.
- * Value returned has whitespace trimmed from both ends.
- *
- * @param fileName Filename of delimited file
- * @param key Key to find
- * @param value Value found for @p Key
- * @param valueLen Size of buffer for @p value
- * @return true if value found, false otherwise.
- */
-_Bool ReadDelimitedValueFromFile(const char* fileName, const char* key, char* value, unsigned int valueLen)
-{
-    _Bool foundKey = false;
-    const unsigned int bufferLen = 1024;
-    char buffer[bufferLen];
-
-    if (valueLen < 2)
-    {
-        // Need space for at least a character and a null terminator.
-        return false;
-    }
-
-    FILE* fp = fopen(fileName, "r");
-    if (fp == NULL)
-    {
-        return false;
-    }
-
-    while (!foundKey && fgets(buffer, bufferLen, fp) != NULL)
-    {
-        char* delimiter = strchr(buffer, '=');
-        if (delimiter == NULL)
-        {
-            // Ignore lines without delimiters.
-            continue;
-        }
-
-        // Change the delimiter character to a NULL for ease of parsing.
-        *delimiter = '\0';
-
-        ADUC_StringUtils_Trim(buffer);
-        foundKey = (strcmp(buffer, key) == 0);
-        if (!foundKey)
-        {
-            continue;
-        }
-
-        char* foundValue = delimiter + 1;
-        ADUC_StringUtils_Trim(foundValue);
-        strncpy(value, foundValue, valueLen);
-        if (value[valueLen - 1] != '\0')
-        {
-            // strncpy pads the buffer with NULL up to valueLen, so if
-            // that position doesn't have a NULL, the buffer provided was too small.
-            foundKey = false;
-            break;
-        }
-    }
-
-    fclose(fp);
-
-    return foundKey;
-}
+// keep this last to avoid interfering with system headers
+#include "aduc/aduc_banned.h"
 
 /**
  * @brief Function that sets @p strBuffers to the contents of the file at @p filePath if the contents are smaller in size than the buffer
@@ -94,50 +29,65 @@ _Bool ReadDelimitedValueFromFile(const char* fileName, const char* key, char* va
  * @param strBuffSize the size of the buffer
  * @returns false on failure, true on success
  */
-_Bool LoadBufferWithFileContents(const char* filePath, char* strBuffer, const size_t strBuffSize)
+bool LoadBufferWithFileContents(const char* filePath, char* strBuffer, const size_t strBuffSize)
 {
     if (filePath == NULL || strBuffer == NULL || strBuffSize == 0)
     {
         return false;
     }
 
-    _Bool success = false;
-
-    // NOLINTNEXTLINE(android-cloexec-open): We are not guaranteed to have access to O_CLOEXEC on all of our builds so no need to include
-    int fd = open(filePath, O_EXCL | O_RDONLY);
-
-    if (fd == -1)
-    {
-        goto done;
-    }
+    bool success = false;
+    FILE* fp = NULL;
 
     struct stat bS;
-
     if (stat(filePath, &bS) != 0)
     {
         goto done;
     }
 
-    long fileSize = bS.st_size;
-
+    const long fileSize = bS.st_size;
     if (fileSize == 0 || fileSize > strBuffSize)
     {
         goto done;
     }
 
-    size_t numRead = read(fd, strBuffer, fileSize);
-
-    if (numRead != fileSize)
+    fp = fopen(filePath, "rt");
+    if (fp == NULL)
     {
         goto done;
     }
 
-    strBuffer[numRead] = '\0';
+    char* readBuff = strBuffer;
+    size_t buffSize = strBuffSize;
+
+    while (true)
+    {
+        const char* line = fgets(readBuff, (int)buffSize, fp);
+        if (line == NULL)
+        {
+            if (feof(fp))
+            {
+                break;
+            }
+
+            // Error
+            goto done;
+        }
+
+        const size_t readSize = strlen(readBuff);
+        readBuff += readSize;
+        buffSize -= readSize;
+    }
+
+    *readBuff = '\0';
 
     success = true;
-done:
 
-    close(fd);
+done:
+    if (fp != NULL)
+    {
+        fclose(fp);
+    }
 
     if (!success)
     {
@@ -157,7 +107,7 @@ char* ADUC_StringUtils_Trim(char* str)
     char* begin = str;
     char* current = str;
 
-    if (!str || str[0] == '\0')
+    if (IsNullOrEmpty(str))
     {
         return str;
     }
@@ -202,9 +152,9 @@ char* ADUC_StringUtils_Trim(char* str)
  * @param[in] string that needs to be converted
  * @param[out] converted unsigned long
  */
-_Bool atoul(const char* str, unsigned long* converted)
+bool atoul(const char* str, unsigned long* converted)
 {
-    if (str == NULL || *str == '\0')
+    if (IsNullOrEmpty(str))
     {
         return false;
     }
@@ -219,7 +169,7 @@ _Bool atoul(const char* str, unsigned long* converted)
         }
 
         const unsigned long previous = res;
-        res = (res * 10) + (*str - '0');
+        res = (res * 10) + (unsigned long)(*str - '0');
 
         if (res < previous)
         {
@@ -241,9 +191,9 @@ _Bool atoul(const char* str, unsigned long* converted)
  * @param[in] string that needs to be converted
  * @param[out] converted integer
  */
-_Bool atoui(const char* str, unsigned int* ui)
+bool atoui(const char* str, unsigned int* ui)
 {
-    if (str == NULL || *str == '\0')
+    if (IsNullOrEmpty(str))
     {
         return false;
     }
@@ -258,7 +208,7 @@ _Bool atoui(const char* str, unsigned int* ui)
         }
 
         const unsigned int previous = res;
-        res = (res * 10) + (*str - '0');
+        res = (res * 10) + (unsigned int)(*str - '0');
 
         if (res < previous)
         {
@@ -274,16 +224,45 @@ _Bool atoui(const char* str, unsigned int* ui)
 }
 
 /**
+ * @brief  Finds the length in bytes of the given string, not including the final null character. Only the first maxsize characters are inspected: if the null character is not found, maxsize is returned.
+ * @param str  string whose length is to be computed
+ * @param maxsize the limit up to which to check @p str's length
+ * @return Length of the string "str", exclusive of the final null byte, or maxsize if the null character is not found, 0 if str is NULL.
+ */
+size_t ADUC_StrNLen(const char* str, size_t maxsize)
+{
+    if (str == NULL)
+    {
+        return 0;
+    }
+
+    size_t length;
+
+    /* Note that we do not check if s == NULL, because we do not
+    * return errno_t...
+    */
+    for (length = 0; length < maxsize && *str; length++, str++)
+    {
+    }
+
+    return length;
+}
+/**
  * @brief Split updateType string by ':' to return updateTypeName and updateTypeVersion
  * @param[in] updateType - expected "Provider/Name:Version"
- * @param[out] updateTypeName - Caller must call free()
+ * @param[out] updateTypeName - Caller must call free(), can pass NULL if not desired.
  * @param[out] updateTypeVersion
  */
-_Bool ADUC_ParseUpdateType(const char* updateType, char** updateTypeName, unsigned int* updateTypeVersion)
+bool ADUC_ParseUpdateType(const char* updateType, char** updateTypeName, unsigned int* updateTypeVersion)
 {
-    _Bool succeeded = false;
+    bool succeeded = false;
     char* name = NULL;
-    *updateTypeName = NULL;
+
+    if (updateTypeName != NULL)
+    {
+        *updateTypeName = NULL;
+    }
+
     *updateTypeVersion = 0;
 
     if (updateType == NULL)
@@ -299,7 +278,7 @@ _Bool ADUC_ParseUpdateType(const char* updateType, char** updateTypeName, unsign
         goto done;
     }
 
-    const size_t nameLength = delimiter - updateType;
+    const size_t nameLength = (size_t)(delimiter - updateType);
 
     //name is empty
     if (nameLength == 0)
@@ -307,14 +286,17 @@ _Bool ADUC_ParseUpdateType(const char* updateType, char** updateTypeName, unsign
         goto done;
     }
 
-    name = malloc(nameLength + 1);
-    if (name == NULL)
+    if (updateTypeName != NULL)
     {
-        goto done;
-    }
+        name = malloc(nameLength + 1);
+        if (name == NULL)
+        {
+            goto done;
+        }
 
-    memcpy(name, updateType, nameLength);
-    name[nameLength] = '\0';
+        memcpy(name, updateType, nameLength);
+        name[nameLength] = '\0';
+    }
 
     // convert version string to unsigned int
     if (!atoui(delimiter + 1, updateTypeVersion))
@@ -328,11 +310,17 @@ _Bool ADUC_ParseUpdateType(const char* updateType, char** updateTypeName, unsign
 done:
     if (succeeded)
     {
-        *updateTypeName = name;
+        if (updateTypeName != NULL)
+        {
+            *updateTypeName = name;
+        }
     }
     else
     {
-        free(name);
+        if (name != NULL)
+        {
+            free(name);
+        }
     }
 
     return succeeded;
@@ -374,4 +362,112 @@ char* ADUC_StringFormat(const char* fmt, ...)
     }
 
     return outputStr;
+}
+
+/**
+ * @brief Check whether @p str is NULL or empty.
+ *
+ * @param str A string to check.
+ * @return Returns true if @p str is NULL or empty.
+ */
+bool IsNullOrEmpty(const char* str)
+{
+    return str == NULL || *str == '\0';
+}
+
+/**
+ * @brief Allocates memory for @p target and copy @p len characters of @p source into @p target buffer.
+ *
+ * @param[out] target Output string
+ * @param source Source string
+ * @param len Length of string to copy.
+ * @return bool Returns true is success.
+ */
+bool MallocAndSubstr(char** target, char* source, size_t len)
+{
+    if (target == NULL || source == NULL)
+    {
+        return false;
+    }
+    *target = NULL;
+
+    char* t = malloc((len + 1) * sizeof(*t));
+    if (t == NULL)
+    {
+        return false;
+    }
+    memset(t, 0, (len + 1) * sizeof(*t));
+    ADUC_Safe_StrCopyN(t, source, len + 1, len);
+
+    *target = t;
+    return true;
+}
+
+/**
+ * @brief Produces a new string where each character is replaced with output of @p mapFn call.
+ *
+ * @param src The source string (will not be mutated).
+ * @param mapFn The mapping function.
+ * @return char* The new string with characters mapped. Caller owns and must call free(). NULL is returned on failures.
+ * @details returns NULL if string is null or empty. e.g. char* mapped = ADUC_StringUtils_Map(str, tolower);
+ */
+char* ADUC_StringUtils_Map(const char* src, int (*mapFn)(int))
+{
+    char* tgt = NULL;
+    size_t len = strlen(src);
+
+    if (src == NULL || len == 0)
+    {
+        return NULL;
+    }
+
+    tgt = (char*)calloc(1, len + 1);
+    if (tgt == NULL)
+    {
+        return NULL;
+    }
+
+    for (int i = 0; i <= len; ++i)
+    {
+        int ret = mapFn(src[i]);
+
+        if (ret == EOF)
+        {
+            free(tgt);
+            return NULL;
+        }
+        tgt[i] = (char)(ret & 0xFF);
+    }
+
+    return tgt;
+}
+
+/** @brief Safely copies a source string to a destination buffer.
+ *
+ * This function is a safer alternative to strncpy. It ensures that the
+ * destination buffer is always null-terminated and won't cause buffer
+ * overflow if src is large enough to cause truncation.
+ *
+ * @param dest The destination buffer.
+ * @param src The source string to be copied.
+ * @param destByteLen The size of the destination buffer in bytes.
+ * @param numSrcCharsToCopy The number of source chars to copy. It will be truncated and null-terminated if >= destByteLen.
+ * @return size_t The number of src chars copied. If < numSrcCharsToCopy, then it was truncated.
+ */
+size_t ADUC_Safe_StrCopyN(char* dest, const char* src, size_t destByteLen, size_t numSrcCharsToCopy)
+{
+    if (dest == NULL || src == NULL || destByteLen == 0)
+    {
+        return 0;
+    }
+
+    if (numSrcCharsToCopy >= destByteLen)
+    {
+        numSrcCharsToCopy = destByteLen - 1;
+    }
+
+    memcpy(dest, src, numSrcCharsToCopy);
+    dest[numSrcCharsToCopy] = '\0';
+
+    return numSrcCharsToCopy;
 }

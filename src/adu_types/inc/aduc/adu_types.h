@@ -1,29 +1,49 @@
 /**
- * @file adu_type.h
- * @brief Defines launch arguments and the ConnectionInfo struct used for created the connection between ADU and the IotHub
+ * @file adu_types.h
+ * @brief Defines common types used throughout Device Update agent components.
  *
  * @copyright Copyright (c) Microsoft Corporation.
+ * Licensed under the MIT License.
  */
 #ifndef ADUC_ADU_TYPES_H
 #define ADUC_ADU_TYPES_H
 
-#include <aduc/c_utils.h>
-#include <aduc/logging.h>
-#include <stdbool.h>
+#include <stdbool.h> // for bool
+#include <stddef.h> // for size_T
+
+#include "aduc/c_utils.h"
+#include "aduc/logging.h"
 
 EXTERN_C_BEGIN
+
+typedef enum tagADUC_ExtensionRegistrationType
+{
+    ExtensionRegistrationType_None,
+    ExtensionRegistrationType_UpdateContentHandler,
+    ExtensionRegistrationType_ContentDownloadHandler,
+    ExtensionRegistrationType_ComponentEnumerator,
+    ExtensionRegistrationType_DownloadHandler,
+} ADUC_ExtensionRegistrationType;
+
 /**
  * @brief ADU Client launch arguments.
  */
 typedef struct tagADUC_LaunchArguments
 {
-    int argc; /**< Size of argv */
     char** argv; /**< Command-line arguments */
-    ADUC_LOG_SEVERITY logLevel; /**< Log level */
+    char* ipcCommand; /**< an inter-process command to be insert into a command queue. */
     char* connectionString; /**< Device connection string from command-line. */
-    bool iotHubTracingEnabled; /**< Whether to enable logging from IoT Hub SDK */
+    char* contentDownloaderFilePath; /**< A full path of a content downloader to be registered. */
+    char* extensionFilePath; /**< The path to the extension shared library file. */
+    char* extensionId; /**< The extension id for an extension registration type like
+                            downloadHandlerId for download handlers and updateType for step handlers. */
+    int argc; /**< Size of argv */
+    ADUC_LOG_SEVERITY logLevel; /**< Log level */
+    ADUC_ExtensionRegistrationType extensionRegistrationType; /**< The type of extension being registered. */
+    bool iotHubTracingEnabled; /**< Whether to enable logging from IoT Hub SDK. */
     bool showVersion; /**< Show an agent version */
     bool healthCheckOnly; /**< Only check agent health. Doesn't process any data or messages from services. */
+    char* configFolder; /**< Custom config folder. Default is /etc/adu */
 } ADUC_LaunchArguments;
 
 typedef enum tagADUC_ConnType
@@ -68,16 +88,16 @@ void ADUC_ConnectionInfo_DeAlloc(ADUC_ConnectionInfo* info);
 const char* ADUC_ConnType_ToString(const ADUC_ConnType connType);
 
 /**
- * @brief Scans the connection string and returns the connection type related to the string
- * @details The connection string must use the valid, correct format for the DeviceId and/or the ModuleId
- * e.g.
- * "DeviceId=some-device-id;ModuleId=some-module-id;"
- * If the connection string contains the DeviceId it is an ADUC_ConnType_Device
- * If the connection string contains the DeviceId AND the ModuleId it is an ADUC_ConnType_Module
- * @param connectionString the connection string to scan
- * @returns the connection type for @p connectionString
+ * @brief Struct containing information about the IoT Hub device/model client PnP property update notification.
+ *
  */
-ADUC_ConnType GetConnTypeFromConnectionString(const char* connectionString);
+typedef struct tagADUC_PnPComponentClient_PropertyUpdate_Context
+{
+    bool clientInitiated; /** Indicates that the property update notification was caused by a client request.
+                               For example, when the agent call IoTHub_DeviceClient_LL_GetTwinAsync API.
+                               Note: this value should be set to null when calling ClientHandle_SetClientTwinCallback. */
+    bool forceUpdate; /** In indicates whether the force process the update. */
+} ADUC_PnPComponentClient_PropertyUpdate_Context;
 
 EXTERN_C_END
 

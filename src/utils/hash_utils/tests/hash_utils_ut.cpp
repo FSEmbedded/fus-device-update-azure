@@ -2,12 +2,17 @@
  * @file hash_utils_ut.cpp
  * @brief Unit Tests for hash_utils library
  *
- * @copyright Copyright (c) 2020, Microsoft Corp.
+ * @copyright Copyright (c) Microsoft Corporation.
+ * Licensed under the MIT License.
  */
 #include <aduc/hash_utils.h>
 
-#include <catch2/catch.hpp>
+#include "aduc/system_utils.h" // ADUC_SystemUtils_MkTemp
 
+#include <catch2/catch.hpp>
+using Catch::Matchers::Equals;
+
+#include <aduc/calloc_wrapper.hpp>
 #include <array>
 #include <fstream>
 #include <unordered_map>
@@ -26,8 +31,8 @@ public:
     TestFile()
     {
         // Generate a unique filename.
-        int result = mkstemp(_filePath);
-        REQUIRE(result != -1);
+
+        ADUC_SystemUtils_MkTemp(_filePath);
     }
 
     virtual ~TestFile()
@@ -96,6 +101,28 @@ private:
     // clang-format on
 };
 
+TEST_CASE("ADUC_HashUtils_GetFileHash - SmallFile")
+{
+    SmallFile testFile;
+
+    // clang-format off
+    auto version = GENERATE( // NOLINT(google-build-using-namespace)
+        SHAversion::SHA1,
+        SHAversion::SHA224,
+        SHAversion::SHA256,
+        SHAversion::SHA384,
+        SHAversion::SHA512);
+    // clang-format on
+
+    SECTION("Verify file hash")
+    {
+        INFO("SHAversion: " << version);
+        ADUC::StringUtils::cstr_wrapper hash;
+        REQUIRE(ADUC_HashUtils_GetFileHash(testFile.Filename(), version, hash.address_of()));
+        CHECK_THAT(hash.get(), Equals(testFile.GetDataHashBase64(version)));
+    }
+}
+
 TEST_CASE("ADUC_HashUtils_IsValidFileHash - SmallFile")
 {
     SmallFile testFile;
@@ -112,14 +139,15 @@ TEST_CASE("ADUC_HashUtils_IsValidFileHash - SmallFile")
     SECTION("Verify file hash")
     {
         INFO("SHAversion: " << version);
-        REQUIRE(ADUC_HashUtils_IsValidFileHash(testFile.Filename(), testFile.GetDataHashBase64(version), version));
+        REQUIRE(
+            ADUC_HashUtils_IsValidFileHash(testFile.Filename(), testFile.GetDataHashBase64(version), version, true));
     }
 
     SECTION("Verify bad file hash")
     {
         INFO("SHAversion: " << version);
         REQUIRE_FALSE(ADUC_HashUtils_IsValidFileHash(
-            testFile.Filename(), "xxXXXgW/Nr695oSEGijw/UPGmFCj3OX+26aZKO46iZE=", version));
+            testFile.Filename(), "xxXXXgW/Nr695oSEGijw/UPGmFCj3OX+26aZKO46iZE=", version, true));
     }
 }
 
@@ -245,13 +273,36 @@ TEST_CASE("ADUC_HashUtils_IsValidFileHash - LargeFile")
     SECTION("Verify file hash")
     {
         INFO("SHAversion: " << version);
-        REQUIRE(ADUC_HashUtils_IsValidFileHash(testFile.Filename(), testFile.GetDataHashBase64(version), version));
+        REQUIRE(
+            ADUC_HashUtils_IsValidFileHash(testFile.Filename(), testFile.GetDataHashBase64(version), version, true));
     }
 
     SECTION("Verify bad file hash")
     {
         INFO("SHAversion: " << version);
         REQUIRE_FALSE(ADUC_HashUtils_IsValidFileHash(
-            testFile.Filename(), "xxXXXgW/Nr695oSEGijw/UPGmFCj3OX+26aZKO46iZE=", version));
+            testFile.Filename(), "xxXXXgW/Nr695oSEGijw/UPGmFCj3OX+26aZKO46iZE=", version, true));
+    }
+}
+
+TEST_CASE("ADUC_HashUtils_GetFileHash - LargeFile")
+{
+    SmallFile testFile;
+
+    // clang-format off
+    auto version = GENERATE( // NOLINT(google-build-using-namespace)
+        SHAversion::SHA1,
+        SHAversion::SHA224,
+        SHAversion::SHA256,
+        SHAversion::SHA384,
+        SHAversion::SHA512);
+    // clang-format on
+
+    SECTION("Verify file hash")
+    {
+        INFO("SHAversion: " << version);
+        ADUC::StringUtils::cstr_wrapper hash;
+        REQUIRE(ADUC_HashUtils_GetFileHash(testFile.Filename(), version, hash.address_of()));
+        CHECK_THAT(hash.get(), Equals(testFile.GetDataHashBase64(version)));
     }
 }
