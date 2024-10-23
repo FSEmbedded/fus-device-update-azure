@@ -3,9 +3,6 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-# Copyright (c) Microsoft Corporation.
-# Licensed under the MIT License.
-
 # Ensure we dont end the user's terminal session if invoked from source (".").
 if [[ $0 != "${BASH_SOURCE[0]}" ]]; then
     ret='return'

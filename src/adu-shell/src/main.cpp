@@ -41,6 +41,20 @@ namespace AptGetTasks = Adu::Shell::Tasks::AptGet;
 namespace ScriptTasks = Adu::Shell::Tasks::Script;
 #endif
 
+#ifdef ADUSHELL_FUS_FIRMWARE
+#    include "fusfirmware_tasks.hpp"
+namespace FUSFirmwareUpdateTasks = Adu::Shell::Tasks::FUSFirmware;
+#endif
+
+#ifdef ADUSHELL_FUS_APPLICATION
+#    include "fusapplication_tasks.hpp"
+namespace FUSApplicationUpdateTasks = Adu::Shell::Tasks::FUSApplication;
+#endif
+#ifdef ADUSHELL_FUS_UPDATE
+#    include "fusupdate_tasks.hpp"
+namespace FUSUpdateTasks = Adu::Shell::Tasks::FUSUpdate;
+#endif
+
 namespace adushconst = Adu::Shell::Const;
 
 /**
@@ -249,7 +263,10 @@ int ADUShell_Dowork(const ADUShell_LaunchArguments& launchArgs)
         const std::unordered_map<std::string, ADUShellTaskFuncType> actionMap = {
             { adushconst::update_type_common, CommonTasks::DoCommonTask },
             { adushconst::update_type_microsoft_apt, AptGetTasks::DoAptGetTask },
-            { adushconst::update_type_microsoft_script, ScriptTasks::DoScriptTask }
+            { adushconst::update_type_microsoft_script, ScriptTasks::DoScriptTask },
+            { adushconst::update_type_fus_firmware, FUSFirmwareUpdateTasks::DoFUSFirmwareUpdateTask },
+            { adushconst::update_type_fus_application, FUSApplicationUpdateTasks::DoFUSApplicationUpdateTask },
+            { adushconst::update_type_fus_update, FUSUpdateTasks::DoFUSUpdateTask }
         };
 
         ADUShellTaskFuncType task = actionMap.at(std::string(launchArgs.updateType));

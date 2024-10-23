@@ -16,6 +16,9 @@ namespace Const
 const char* update_type_opt = "--update-type";
 const char* update_type_microsoft_apt = "microsoft/apt";
 const char* update_type_microsoft_script = "microsoft/script";
+const char* update_type_fus_firmware = "fus/firmware";
+const char* update_type_fus_application = "fus/application";
+const char* update_type_fus_update = "fus/update";
 const char* update_type_common = "common";
 const char* update_action_opt = "--update-action";
 const char* update_action_initialize = "initialize";

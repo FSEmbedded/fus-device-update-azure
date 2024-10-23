@@ -1,9 +1,0 @@
-[Unit]
-Description=Device Update Agent daemon FS-Update extension setup
-
-[Service]
-Type=oneshot
-ExecStart=/usr/libexec/adu-agent-setup.sh
-
-[Install]
-WantedBy=multi-user.target

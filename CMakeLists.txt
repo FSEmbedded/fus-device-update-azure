@@ -29,6 +29,7 @@ if (WIN32)
 endif ()
 
 project (azure_device_update_client)
+set(CMAKE_CXX_STANDARD 17)
 
 if (WIN32)
     message (STATUS)

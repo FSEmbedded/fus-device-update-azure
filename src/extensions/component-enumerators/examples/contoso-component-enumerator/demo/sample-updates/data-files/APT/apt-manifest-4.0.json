@@ -1,9 +1,0 @@
-{
-    "name":"apt-update-test",
-    "version":"4.0",
-    "packages":[
-        {
-            "name":"libcurl4-doc"
-        }
-    ]
-}

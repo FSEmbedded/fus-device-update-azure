@@ -2496,6 +2496,14 @@ char* workflow_get_update_type(ADUC_WorkflowHandle handle)
     return workflow_get_update_manifest_string_property(handle, ADUCITF_FIELDNAME_UPDATETYPE);
 }
 
+int workflow_get_update_size(ADUC_WorkflowHandle handle)
+{
+    const JSON_Object* files = _workflow_get_update_manifest_files_map(handle);
+    const JSON_Object* file = json_value_get_object(json_object_get_value_at(files, 0));
+    int sizeInBytes = json_object_get_number(file, ADUCITF_FIELDNAME_SIZEINBYTES);
+	return sizeInBytes;
+}
+
 /**
  * @brief Gets the update type of the specified workflow.
  *

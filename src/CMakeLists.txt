@@ -66,6 +66,12 @@ else ()
     set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${COMPILER_HARDENING_FLAGS} -Wall")
 endif ()
 
+if(NOT DEFINED UPDATER_CLI_FULL_CMD)
+  message(FATAL_ERROR "Updater CLI is not set; Set command \"-DUPDATER_CLI_FULL_CMD:STRING=\"")
+endif(NOT DEFINED UPDATER_CLI_FULL_CMD)
+
+add_compile_definitions (UPDATER_CLI_FULL_CMD="${UPDATER_CLI_FULL_CMD}")
+
 add_definitions (-DADUC_LOG_FOLDER="${ADUC_LOG_FOLDER}")
 
 set (ADUC_TYPES_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/adu_types/inc)
