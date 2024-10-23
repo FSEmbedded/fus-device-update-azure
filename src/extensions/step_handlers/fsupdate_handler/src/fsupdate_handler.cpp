@@ -202,41 +202,65 @@ bool FSUpdateHandlerImpl::create_work_dir()
     return true;
 }
 
-static ADUC_Result HandleFSUpdateRebootState()
+static ADUC_Result HandleExecuteAction(const std::string& targetaction, std::string& output)
 {
+    int exitCode = 0;
     ADUC_Result result = { ADUC_Result_Failure };
     std::string command = ADUSHELL_FILE_PATH;
+    const char* logevel = "-l 3";
     std::vector<std::string> args{ adushconst::update_type_opt,
                                    adushconst::update_type_fus_update,
                                    adushconst::update_action_opt,
                                    adushconst::update_action_execute,
                                    adushconst::target_options_opt,
-                                   "update_state" };
-
-    Log_Info("Verify current_update_state");
-
-    std::string output;
+                                   targetaction, logevel };
     result.ExtendedResultCode = ADUC_LaunchChildProcess(command, args, output);
 
     return result;
 }
 
-static ADUC_Result CommitUpdateState(const char* update_type)
+static void WriteErrorState(const std::filesystem::path& error_file, ADUC_Result& error_code)
 {
-    ADUC_Result result = { ADUC_Result_Failure };
-    Log_Info("Applying update.");
+    std::ofstream error_state(error_file);
+    if (!error_state.is_open())
+    {
+        Log_Error("Could not create %s.", error_file.string().c_str());
+    }
+    error_state << error_code.ResultCode;
+    error_state << error_code.ExtendedResultCode;
+    error_state.close();
+}
 
-    std::string command = ADUSHELL_FILE_PATH;
-    std::vector<std::string> args{ adushconst::update_type_opt,
-                                   update_type,
-                                   adushconst::update_action_opt,
-                                   adushconst::update_action_apply };
+static bool GetNextSubstringFromString(std::string& fullstr, const std::string& substr)
+{
+    std::string next_substr;
+    std::string special_chars = "\n\t";
+    /* search for substring in in target_option*/
+    size_t pos = fullstr.find(substr);
+    if (pos != std::string::npos)
+    {
+        /* Calculate the start position of the next substring after the space */
+        size_t next_pos = fullstr.find_first_not_of(' ', pos + substr.length());
 
-    std::string output;
+        /* Find the next space or the end of the string */
+        size_t end_pos = fullstr.find(' ', next_pos);
+        if (end_pos == std::string::npos)
+        {
+            end_pos = fullstr.length();
+        }
 
-    result.ExtendedResultCode = ADUC_LaunchChildProcess(command, args, output);
-
-    return result;
+        /* Extract the next substring */
+        next_substr = fullstr.substr(next_pos, end_pos - next_pos);
+        /* remove special character like word wrap not */
+        for (char c : special_chars)
+        {
+            next_substr.erase(std::remove(next_substr.begin(), next_substr.end(), c), next_substr.end());
+        }
+        fullstr.clear();
+        fullstr = next_substr;
+        return true;
+    }
+    return false;
 }
 
 /**
@@ -252,7 +276,7 @@ ADUC_Result FSUpdateHandlerImpl::Download(const tagADUC_WorkflowData* workflowDa
     ADUC_WorkflowHandle workflowHandle = workflowData->WorkflowHandle;
     char* workflowId = workflow_get_id(workflowHandle);
     char* workFolder = workflow_get_workfolder(workflowHandle);
-    int fileCount = 0;
+    size_t fileCount = 0;
 
     memset(&fileEntity, 0, sizeof(fileEntity));
     // For 'fus/update:1', we're expecting 1 payload file.
@@ -483,7 +507,12 @@ ADUC_Result FSUpdateHandlerImpl::Install(const tagADUC_WorkflowData* workflowDat
 
 done:
     workflow_free_string(workFolder);
-
+    if(result.ResultCode != ADUC_Result_Install_Success)
+    {
+        /* remove installUpdate file because installation fails.*/
+        std::filesystem::remove( work_dir / "installUpdate");
+    }
+    WriteErrorState(work_dir / "errorState", result);
     return result;
 }
 
@@ -497,8 +526,9 @@ done:
 ADUC_Result FSUpdateHandlerImpl::Apply(const tagADUC_WorkflowData* workflowData)
 {
     ADUC_Result result;
+    std::string result_msg;
 
-    result = HandleFSUpdateRebootState();
+    result = HandleExecuteAction("--update_reboot_state", result_msg);
 
     switch (result.ExtendedResultCode)
     {
@@ -554,8 +584,9 @@ ADUC_Result FSUpdateHandlerImpl::Apply(const tagADUC_WorkflowData* workflowData)
 ADUC_Result FSUpdateHandlerImpl::Cancel(const tagADUC_WorkflowData* workflowData)
 {
     ADUC_Result result = { ADUC_Result_Failure };
+    std::string result_msg;
 
-    result = HandleFSUpdateRebootState();
+    result = HandleExecuteAction("--update_reboot_state", result_msg);
     if (result.ExtendedResultCode == static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::INCOMPLETE_APP_UPDATE))
     {
         Log_Info("Incomplete application update -> proceed rollback");
@@ -580,7 +611,7 @@ ADUC_Result FSUpdateHandlerImpl::Cancel(const tagADUC_WorkflowData* workflowData
             return result;
         }
 
-        result  = HandleFSUpdateRebootState();
+        result = HandleExecuteAction("--update_reboot_state", result_msg);
         if (result.ExtendedResultCode == static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::ROLLBACK_FW_REBOOT_PENDING))
         {
             Log_Info("Incomplete firmware rollback update -> proceed reboot");
@@ -601,8 +632,9 @@ ADUC_Result FSUpdateHandlerImpl::Cancel(const tagADUC_WorkflowData* workflowData
     }
     else if (result.ExtendedResultCode == static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::ROLLBACK_FW_REBOOT_PENDING))
     {
+        std::string result_msg;
         Log_Info("Incomplete firmware rollback update -> reboot processed");
-        result = CommitUpdateState(adushconst::update_type_fus_firmware);
+        result = HandleExecuteAction("--commit_update", result_msg);
 
         if (result.ExtendedResultCode == static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::NO_UPDATE_REBOOT_PENDING))
         {
@@ -643,12 +675,10 @@ ADUC_Result FSUpdateHandlerImpl::IsInstalled(const tagADUC_WorkflowData* workflo
     ADUC_WorkflowHandle workflowHandle = workflowData->WorkflowHandle;
     bool both_versions = false;
     std::string cmd_output;
-    std::string special_chars = "\n\t";
-    int exitCode = 0;
     update_type_t up_type = UPDATE_UNKNOWN;
-    const std::string command(UPDATER_CLI_FULL_CMD);
-    std::vector<std::string> args(1);
     std::string update_type_name;
+    std::string result_msg;
+    std::string target_option;
 
     // read update type from handler properties node.
     const char* type_name =
@@ -662,12 +692,12 @@ ADUC_Result FSUpdateHandlerImpl::IsInstalled(const tagADUC_WorkflowData* workflo
     update_type_name = type_name;
     up_type = this->getUpdateType(update_type_name);
 
-    Log_Info("IsInstalled  update_type_name = %s", update_type_name.c_str());
+    printf("IsInstalled  update_type_name = %s\n", update_type_name.c_str());
 
-    args[0] = "--firmware_version";
+    target_option = "--firmware_version";
     if (up_type == UPDATE_APPLICATION || up_type == UPDATE_COMMON_APPLICATION)
     {
-        args[0] = "--application_version";
+        target_option = "--application_version";
     }
     else if (up_type == UPDATE_UNKNOWN)
     {
@@ -677,12 +707,10 @@ ADUC_Result FSUpdateHandlerImpl::IsInstalled(const tagADUC_WorkflowData* workflo
         goto done;
     }
 
-    exitCode = ADUC_LaunchChildProcess(command, args, cmd_output);
-
-    if (exitCode != 0)
+    result = HandleExecuteAction(target_option, cmd_output);
+    if (result.ExtendedResultCode != 0)
     {
-        Log_Error("IsInstalled failed, extendedResultCode = %d", exitCode);
-        result = { ADUC_Result_Failure, exitCode };
+        Log_Error("IsInstalled failed, extendedResultCode = %d", result.ExtendedResultCode);
         goto done;
     }
 
@@ -692,12 +720,13 @@ ADUC_Result FSUpdateHandlerImpl::IsInstalled(const tagADUC_WorkflowData* workflo
         result = { ADUC_Result_Failure };
         goto done;
     }
-
-    /* remove special character like word wrap not */
-    for (char c : special_chars)
-    {
-        cmd_output.erase(std::remove(cmd_output.begin(), cmd_output.end(), c), cmd_output.end());
-    }
+    /* Unfortunaly the adu shell return full output
+     * Part of the full log string is --firmware_version <value>
+     * or --application_version <value>. The <value> is a version
+     * string and would extract from full output string.
+     * TODO: Check to get version strings directly.
+    */
+    GetNextSubstringFromString(cmd_output, target_option);
 
     Log_Info(
         "Compare %s version %s and installedCriteria %s",
@@ -707,7 +736,7 @@ ADUC_Result FSUpdateHandlerImpl::IsInstalled(const tagADUC_WorkflowData* workflo
 
     if (cmd_output.compare(installedCriteria) == 0)
     {
-        result = HandleFSUpdateRebootState();
+        result = HandleExecuteAction("--update_reboot_state", result_msg);
 
         if (result.ExtendedResultCode == static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::INCOMPLETE_APP_FW_UPDATE))
         {
@@ -756,15 +785,14 @@ ADUC_Result FSUpdateHandlerImpl::IsInstalled(const tagADUC_WorkflowData* workflo
     if (up_type == UPDATE_COMMON_BOTH)
     {
         /* In case of common update, application update has to be checked too. */
-        args[0] = "--application_version";
+        target_option = "--application_version";
         /* clear old value of firmware_version */
         cmd_output.clear();
-        exitCode = ADUC_LaunchChildProcess(command, args, cmd_output);
+        result = HandleExecuteAction(target_option, cmd_output);
 
-        if (exitCode != 0)
+        if (result.ExtendedResultCode != 0)
         {
-            Log_Error("IsInstalled failed, extendedResultCode = %d", exitCode);
-            result = { ADUC_Result_Failure, exitCode };
+            Log_Error("IsInstalled failed, extendedResultCode = %d", result.ExtendedResultCode);
             goto done;
         }
 
@@ -775,15 +803,11 @@ ADUC_Result FSUpdateHandlerImpl::IsInstalled(const tagADUC_WorkflowData* workflo
             goto done;
         }
 
-        /* remove special character like word wrap not */
-        for (char c : special_chars)
-        {
-            cmd_output.erase(std::remove(cmd_output.begin(), cmd_output.end(), c), cmd_output.end());
-        }
+        GetNextSubstringFromString(cmd_output, target_option);
 
         if (cmd_output.compare(installedCriteria) == 0)
         {
-            result = HandleFSUpdateRebootState();
+            result = HandleExecuteAction("--update_reboot_state", result_msg);
 
             if (result.ExtendedResultCode == static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::INCOMPLETE_APP_UPDATE))
             {
@@ -813,12 +837,13 @@ ADUC_Result FSUpdateHandlerImpl::IsInstalled(const tagADUC_WorkflowData* workflo
         }
     }
 
-    result = HandleFSUpdateRebootState();
+    result = HandleExecuteAction("--update_reboot_state", result_msg);
 
     if (result.ExtendedResultCode == static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::FAILED_APP_UPDATE))
     {
+        std::string result_msg;
         Log_Info("IsInstalled based of failed application update successful -> commit failed update.");
-        result = CommitUpdateState(adushconst::update_type_fus_application);
+        result = HandleExecuteAction("--commit_update", result_msg);
 
         if (result.ExtendedResultCode == static_cast<int>(UPDATER_COMMIT_STATE::UPDATE_COMMIT_SUCCESSFUL))
         {
@@ -835,8 +860,9 @@ ADUC_Result FSUpdateHandlerImpl::IsInstalled(const tagADUC_WorkflowData* workflo
     }
     else if (result.ExtendedResultCode == static_cast<int>(UPDATER_UPDATE_REBOOT_STATE::FAILED_FW_UPDATE))
     {
+        std::string result_msg;
         Log_Info("IsInstalled based of failed firmware update successful -> commit failed update.");
-        result = CommitUpdateState(adushconst::update_type_fus_firmware);
+        result = HandleExecuteAction("--commit_update", result_msg);
 
         if (result.ExtendedResultCode == static_cast<int>(UPDATER_COMMIT_STATE::UPDATE_COMMIT_SUCCESSFUL))
         {
