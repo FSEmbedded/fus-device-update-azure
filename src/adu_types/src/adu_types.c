@@ -16,8 +16,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <azure_c_shared_utility/crt_abstractions.h> // for mallocAndStrcpy_s
-
 /**
  * @brief Returns the string associated with @p connType
  * @param connType ADUC_ConnType to be stringified
@@ -64,7 +62,7 @@ void ADUC_ConnectionInfo_DeAlloc(ADUC_ConnectionInfo* info)
  * @param updateId updateId to check
  * @returns True if it is valid, false if not
  */
-_Bool ADUC_IsValidUpdateId(const ADUC_UpdateId* updateId)
+bool ADUC_IsValidUpdateId(const ADUC_UpdateId* updateId)
 {
     return !(
         updateId == NULL || IsNullOrEmpty(updateId->Provider) || IsNullOrEmpty(updateId->Name)
@@ -73,7 +71,7 @@ _Bool ADUC_IsValidUpdateId(const ADUC_UpdateId* updateId)
 
 /**
  * @brief Free the UpdateId and its content.
- * @param updateid a pointer to an updateId struct to be freed
+ * @param updateId a pointer to an updateId struct to be freed
  */
 void ADUC_UpdateId_UninitAndFree(ADUC_UpdateId* updateId)
 {
@@ -83,67 +81,16 @@ void ADUC_UpdateId_UninitAndFree(ADUC_UpdateId* updateId)
     }
 
     free(updateId->Provider);
+    updateId->Provider = NULL;
+
     free(updateId->Name);
+    updateId->Name = NULL;
+
     free(updateId->Version);
+    updateId->Version = NULL;
+
     free(updateId);
 }
-
-/**
- * @brief Allocates and sets the UpdateId fields
- * @details Caller should free the allocated ADUC_UpdateId* using ADUC_UpdateId_UninitAndFree()
- * @param provider the provider for the UpdateId
- * @param name the name for the UpdateId
- * @param version the version for the UpdateId
- *
- * @returns An UpdateId on success, NULL on failure
- */
-ADUC_UpdateId* ADUC_UpdateId_AllocAndInit(const char* provider, const char* name, const char* version)
-{
-    _Bool success = false;
-
-    ADUC_UpdateId* updateId = (ADUC_UpdateId*)calloc(1, sizeof(ADUC_UpdateId));
-
-    if (updateId == NULL)
-    {
-        Log_Error("ADUC_UpdateId_AllocAndInit called with a NULL updateId handle");
-        goto done;
-    }
-
-    if (provider == NULL || name == NULL || version == NULL)
-    {
-        Log_Error(
-            "Invalid call to ADUC_UpdateId_AllocAndInit with provider %s name %s version %s", provider, name, version);
-        goto done;
-    }
-
-    if (mallocAndStrcpy_s(&(updateId->Provider), provider) != 0)
-    {
-        goto done;
-    }
-
-    if (mallocAndStrcpy_s(&(updateId->Name), name) != 0)
-    {
-        goto done;
-    }
-
-    if (mallocAndStrcpy_s(&(updateId->Version), version) != 0)
-    {
-        goto done;
-    }
-
-    success = true;
-
-done:
-
-    if (!success)
-    {
-        ADUC_UpdateId_UninitAndFree(updateId);
-        updateId = NULL;
-    }
-
-    return updateId;
-}
-
 
 /**
  * @brief Convert UpdateState to string representation.
@@ -163,10 +110,16 @@ const char* ADUCITF_StateToString(ADUCITF_State updateState)
         return "DownloadStarted";
     case ADUCITF_State_DownloadSucceeded:
         return "DownloadSucceeded";
+    case ADUCITF_State_BackupStarted:
+        return "BackupStarted";
+    case ADUCITF_State_BackupSucceeded:
+        return "BackupSucceeded";
     case ADUCITF_State_InstallStarted:
         return "InstallStarted";
     case ADUCITF_State_InstallSucceeded:
         return "InstallSucceeded";
+    case ADUCITF_State_RestoreStarted:
+        return "RestoreStarted";
     case ADUCITF_State_ApplyStarted:
         return "ApplyStarted";
     case ADUCITF_State_DeploymentInProgress:

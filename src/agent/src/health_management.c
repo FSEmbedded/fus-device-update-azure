@@ -13,24 +13,41 @@
 #include "aduc/system_utils.h" // for SystemUtils_IsDir, SystemUtils_IsFile
 #include <azure_c_shared_utility/strings.h> // for STRING_HANDLE, STRING_delete, STRING_c_str
 #include <ctype.h>
+#include <errno.h>
 #include <stdbool.h>
 #include <string.h>
-#include <sys/stat.h>
+
+#include <aducpal/sys_stat.h> // S_I*
 
 /**
  * @brief The users that must exist on the system.
  */
-static const char* aduc_required_users[] = { ADUC_FILE_USER, DO_FILE_USER };
+static const char* aduc_required_users[] = { ADUC_FILE_USER };
+
+/**
+ * @brief The optional users.
+ */
+static const char* aduc_optional_users[] = { DO_FILE_USER };
 
 /**
  * @brief The groups that must exist on the system.
  */
-static const char* aduc_required_groups[] = { ADUC_FILE_GROUP, DO_FILE_GROUP };
+static const char* aduc_required_groups[] = { ADUC_FILE_GROUP };
+
+/**
+ * @brief The optional groups.
+ */
+static const char* aduc_optional_groups[] = { DO_FILE_GROUP };
 
 /**
  * @brief The supplementary groups for ADUC_FILE_USER
  */
-static const char* aduc_required_group_memberships[] = {
+static const char* aduc_required_group_memberships[] = { NULL };
+
+/**
+ * @brief The supplementary groups for ADUC_FILE_USER
+ */
+static const char* aduc_optional_group_memberships[] = {
     DO_FILE_GROUP // allows agent to set connection_string for DO
 };
 
@@ -39,32 +56,26 @@ static const char* aduc_required_group_memberships[] = {
  *
  * @return true if connection info can be obtained
  */
-_Bool GetConnectionInfoFromIdentityService(ADUC_ConnectionInfo* info);
+bool GetConnectionInfoFromIdentityService(ADUC_ConnectionInfo* info);
 
 /**
  * @brief Get the Connection Info from connection string, if a connection string is provided in configuration file
  *
  * @return true if connection info can be obtained
  */
-_Bool GetConnectionInfoFromConnectionString(ADUC_ConnectionInfo* info, const char* connectionString);
-
-/**
- * @brief Get the Connection Info from self-signed x509
- *
- * @return true if connection info can be obtained
- */
-_Bool GetConnectionInfoFromConnectionx509Certificate(ADUC_ConnectionInfo* info, const char* connectionString);
+bool GetConnectionInfoFromConnectionString(ADUC_ConnectionInfo* info, const char* connectionString);
 
 /**
  * @brief Checks whether we can obtain a device or module connection string.
  *
  * @return true if connection string can be obtained.
  */
-_Bool IsConnectionInfoValid(const ADUC_LaunchArguments* launchArgs, ADUC_ConfigInfo* config)
+bool IsConnectionInfoValid(const ADUC_LaunchArguments* launchArgs, const ADUC_ConfigInfo* config)
 {
-    _Bool validInfo = false;
+    bool validInfo = false;
 
-    ADUC_ConnectionInfo info = {};
+    ADUC_ConnectionInfo info;
+    memset(&info, 0, sizeof(info));
 
     if (launchArgs->connectionString != NULL)
     {
@@ -86,10 +97,6 @@ _Bool IsConnectionInfoValid(const ADUC_LaunchArguments* launchArgs, ADUC_ConfigI
     {
         validInfo = GetConnectionInfoFromConnectionString(&info, agent->connectionData);
     }
-    else if (strcmp(agent->connectionType, "x509") == 0)
-    {
-        validInfo = GetConnectionInfoFromConnectionx509Certificate(&info, agent->connectionData);
-    }
     else
     {
         Log_Error("The connection type %s is not supported", agent->connectionType);
@@ -101,30 +108,29 @@ done:
 }
 
 /**
- * @brief Helper function for simulating an unhealthy state.
- *
- * @return true if an ADU configuration file contains simulateUnhealthyState value (any value).
- */
-_Bool IsSimulatingUnhealthyState(ADUC_ConfigInfo* config)
-{
-    return config->simulateUnhealthyState;
-}
-
-/**
  * @brief Reports which required users do not exist.
  * @remark Goes through the whole list of users to trace any that are missing.
  * @return true if all necessary users exist, or false if any do not exist.
  */
-static _Bool ReportMissingRequiredUsers()
+static bool ReportMissingRequiredUsers()
 {
-    _Bool result = true;
+    bool result = true;
 
     for (int i = 0; i < ARRAY_SIZE(aduc_required_users); ++i)
     {
         if (!PermissionUtils_UserExists(aduc_required_users[i]))
         {
-            Log_Error("User '%s' does not exist.", aduc_required_users[i]);
+            Log_Error("Required user '%s' does not exist.", aduc_required_users[i]);
             result = false;
+            // continue on to next user
+        }
+    }
+
+    for (int i = 0; i < ARRAY_SIZE(aduc_optional_users); ++i)
+    {
+        if (!PermissionUtils_UserExists(aduc_optional_users[i]))
+        {
+            Log_Warn("Optional user '%s' does not exist.", aduc_optional_users[i]);
             // continue on to next user
         }
     }
@@ -137,16 +143,25 @@ static _Bool ReportMissingRequiredUsers()
  * @remark Goes through the whole list of groups to trace any that are missing.
  * @return true if necessary groups exist.
  */
-static _Bool ReportMissingRequiredGroups()
+static bool ReportMissingRequiredGroups()
 {
-    _Bool result = true;
+    bool result = true;
 
     for (int i = 0; i < ARRAY_SIZE(aduc_required_groups); ++i)
     {
         if (!PermissionUtils_GroupExists(aduc_required_groups[i]))
         {
-            Log_Error("Group '%s' does not exist.", aduc_required_groups[i]);
+            Log_Error("Required group '%s' does not exist.", aduc_required_groups[i]);
             result = false;
+            // continue on to next user
+        }
+    }
+
+    for (int i = 0; i < ARRAY_SIZE(aduc_optional_groups); ++i)
+    {
+        if (!PermissionUtils_GroupExists(aduc_optional_groups[i]))
+        {
+            Log_Warn("Optional group '%s' does not exist.", aduc_optional_groups[i]);
             // continue on to next user
         }
     }
@@ -159,13 +174,18 @@ static _Bool ReportMissingRequiredGroups()
  * @remark Goes through all required user/group relationships and traces any that are missing.
  * @returns true if all necessary group membership entries exist, or false if any are missing.
  */
-static _Bool ReportMissingGroupMemberships()
+static bool ReportMissingGroupMemberships()
 {
-    _Bool result = true;
+    bool result = true;
 
     // ADUC group memberships
     for (int i = 0; i < ARRAY_SIZE(aduc_required_group_memberships); ++i)
     {
+        if (aduc_required_group_memberships[i] == NULL)
+        {
+            continue;
+        }
+
         if (!PermissionUtils_UserInSupplementaryGroup(ADUC_FILE_USER, aduc_required_group_memberships[i]))
         {
             Log_Error("User '%s' is not a member of '%s' group.", ADUC_FILE_USER, aduc_required_group_memberships[i]);
@@ -174,11 +194,20 @@ static _Bool ReportMissingGroupMemberships()
         }
     }
 
+    // ADUC group memberships
+    for (int i = 0; i < ARRAY_SIZE(aduc_optional_group_memberships); ++i)
+    {
+        if (!PermissionUtils_UserInSupplementaryGroup(ADUC_FILE_USER, aduc_optional_group_memberships[i]))
+        {
+            Log_Warn("User '%s' is not a member of '%s' group.", ADUC_FILE_USER, aduc_optional_group_memberships[i]);
+            // continue evaluating next membership
+        }
+    }
+
     // DO group memberships
     if (!PermissionUtils_UserInSupplementaryGroup(DO_FILE_USER, ADUC_FILE_GROUP))
     {
-        Log_Error("User '%s' is not a member of '%s' group.", DO_FILE_USER, ADUC_FILE_GROUP);
-        result = false;
+        Log_Warn("User '%s' is not a member of '%s' group.", DO_FILE_USER, ADUC_FILE_GROUP);
     }
 
     return result;
@@ -188,13 +217,13 @@ static _Bool ReportMissingGroupMemberships()
  * @brief Reports on necessary user and group entries.
  * @return true if all necessary entries exist, or false if any are missing.
  */
-static _Bool ReportUserAndGroupRequirements()
+static bool ReportUserAndGroupRequirements()
 {
-    _Bool result = false;
+    bool result = false;
 
     // Call both to get logging side-effects.
-    _Bool missingUser = !ReportMissingRequiredUsers();
-    _Bool missingGroup = !ReportMissingRequiredGroups();
+    bool missingUser = !ReportMissingRequiredUsers();
+    bool missingGroup = !ReportMissingRequiredGroups();
     if (missingUser || missingGroup)
     {
         // skip reporting group memberships if any user/groups are missing
@@ -217,13 +246,13 @@ done:
  * @brief Checks the conf directory has correct ownerships and permissions and logs when an issue is found.
  * @returns true if everything is correct.
  */
-static _Bool CheckConfDirOwnershipAndPermissions()
+static bool CheckConfDirOwnershipAndPermissions()
 {
-    _Bool result = true;
+    bool result = true;
 
     const char* path = ADUC_CONF_FOLDER;
 
-    if (SystemUtils_IsDir(path))
+    if (SystemUtils_IsDir(path, NULL))
     {
         if (!PermissionUtils_CheckOwnership(path, ADUC_FILE_USER, ADUC_FILE_GROUP))
         {
@@ -233,8 +262,8 @@ static _Bool CheckConfDirOwnershipAndPermissions()
         }
 
         // owning user can read, write, and list entries in dir.
-        // group members and everyone else can read and list entries in dir.
-        const mode_t expected_permissions = S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH;
+        // group members can read and list entries in dir.
+        const mode_t expected_permissions = S_IRWXU | S_IRGRP | S_IXGRP;
 
         if (!PermissionUtils_VerifyFilemodeExact(path, expected_permissions))
         {
@@ -258,13 +287,13 @@ static _Bool CheckConfDirOwnershipAndPermissions()
  * @brief Checks the conf file ownerships and permissions and logs issues when found.
  * @returns true if everything is correct.
  */
-static _Bool CheckConfFile()
+static bool CheckConfFile()
 {
-    _Bool result = true;
+    bool result = true;
 
     const char* path = ADUC_CONF_FILE_PATH;
 
-    if (SystemUtils_IsFile(path))
+    if (SystemUtils_IsFile(path, NULL))
     {
         if (!PermissionUtils_CheckOwnership(path, ADUC_FILE_USER, ADUC_FILE_GROUP))
         {
@@ -272,7 +301,7 @@ static _Bool CheckConfFile()
             result = false;
         }
 
-        const mode_t bitmask = S_IRUSR | S_IRGRP | S_IROTH;
+        const mode_t bitmask = S_IRUSR | S_IRGRP;
 
         if (!PermissionUtils_VerifyFilemodeBitmask(path, bitmask))
         {
@@ -293,15 +322,21 @@ static _Bool CheckConfFile()
  * @brief Checks the log directory ownerships and permissions.
  * @returns true if everything is correct.
  */
-static _Bool CheckLogDir()
+static bool CheckLogDir()
 {
-    _Bool result = false;
+    bool result = false;
 
     const char* dir = ADUC_LOG_FOLDER;
 
-    if (!SystemUtils_IsDir(dir))
+    int err;
+    if (!SystemUtils_IsDir(dir, &err))
     {
-        Log_Error("'%s' does not exist or is not a directory", dir);
+        if (err != 0)
+        {
+            Log_Error("Cannot get '%s' status. (errno: %d)", dir, errno);
+            goto done;
+        }
+        Log_Error("'%s' is not a directory", dir);
         goto done;
     }
 
@@ -334,13 +369,20 @@ done:
  * @param expectedPermissions The expected permissions of the file object.
  * @returns true if everything is correct.
  */
-static _Bool CheckDirOwnershipAndVerifyFilemodeExact(const char* path, const char* user, const char* group, const mode_t expected_permissions)
+static bool CheckDirOwnershipAndVerifyFilemodeExact(
+    const char* path, const char* user, const char* group, const mode_t expected_permissions)
 {
-    _Bool result = false;
+    bool result = false;
 
-    if (!SystemUtils_IsDir(path))
+    int err;
+    if (!SystemUtils_IsDir(path, &err))
     {
-        Log_Error("'%s' does not exist or is not a directory", path);
+        if (err != 0)
+        {
+            Log_Error("Cannot get '%s' status. (errno: %d)", path, errno);
+            goto done;
+        }
+        Log_Error("'%s' is not a directory", path);
         goto done;
     }
 
@@ -367,35 +409,44 @@ done:
  * @brief Checks the data directory ownerships and permissions.
  * @returns true if everything is correct.
  */
-static _Bool CheckDataDir()
+static bool CheckDataDir()
 {
     // Note: "Other" bits are cleared to align with ADUC_SystemUtils_MkDirRecursiveDefault and packaging.
     const mode_t expected_permissions = S_IRWXU | S_IRWXG;
-    return CheckDirOwnershipAndVerifyFilemodeExact(ADUC_DATA_FOLDER, ADUC_FILE_USER, ADUC_FILE_GROUP, expected_permissions);
+    return CheckDirOwnershipAndVerifyFilemodeExact(
+        ADUC_DATA_FOLDER, ADUC_FILE_USER, ADUC_FILE_GROUP, expected_permissions);
 }
 
 /**
  * @brief Checks the downloads directory ownerships and permissions.
  * @returns true if everything is correct.
  */
-static _Bool CheckDownloadsDir()
+static bool CheckDownloadsDir()
 {
+    bool ret = false;
     // Note: "Other" bits are cleared to align with ADUC_SystemUtils_MkDirRecursiveDefault and packaging.
     const mode_t expected_permissions = S_IRWXU | S_IRWXG;
-    return CheckDirOwnershipAndVerifyFilemodeExact(ADUC_DOWNLOADS_FOLDER, ADUC_FILE_USER, ADUC_FILE_GROUP, expected_permissions);
+    const ADUC_ConfigInfo* config = ADUC_ConfigInfo_GetInstance();
+    if (config != NULL)
+    {
+        ret = CheckDirOwnershipAndVerifyFilemodeExact(
+            config->downloadsFolder, ADUC_FILE_USER, ADUC_FILE_GROUP, expected_permissions);
+        ADUC_ConfigInfo_ReleaseInstance(config);
+    }
+    return ret;
 }
 
 /**
  * @brief Checks the agent binary ownerships and permissions.
  * @returns true if everything is correct.
  */
-static _Bool CheckAgentBinary()
+static bool CheckAgentBinary()
 {
-    _Bool result = false;
+    bool result = false;
 
     const char* path = ADUC_AGENT_FILEPATH;
 
-    if (SystemUtils_IsFile(path))
+    if (SystemUtils_IsFile(path, NULL))
     {
         if (!PermissionUtils_CheckOwnerUid(path, 0 /* root */))
         {
@@ -408,7 +459,12 @@ static _Bool CheckAgentBinary()
             goto done;
         }
 
-        const mode_t expected_permissions = S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH;
+        // clang-format off
+        const mode_t expected_permissions =
+            S_IRWXU |           // RWX user
+            S_IROTH | S_IXOTH | // R-X other
+            S_IRGRP | S_IXGRP;  // R-X group
+        // clang-format on
 
         if (!PermissionUtils_VerifyFilemodeExact(path, expected_permissions))
         {
@@ -428,39 +484,53 @@ done:
  * @brief Checks the adu-shell binary ownerships and permissions.
  * @returns true if everything is correct.
  */
-static _Bool CheckShellBinary()
+static bool CheckShellBinary()
 {
-    _Bool result = false;
+    bool result = false;
 
-    const char* path = ADUSHELL_FILE_PATH;
+    const ADUC_ConfigInfo* config = ADUC_ConfigInfo_GetInstance();
 
-    if (SystemUtils_IsFile(path))
+    if (config == NULL)
     {
-        if (!PermissionUtils_CheckOwnerUid(path, 0 /* root */))
+        Log_Error("ADUC_ConfigInfo singleton hasn't been initialized.");
+        goto done;
+    }
+
+    if (SystemUtils_IsFile(config->aduShellFilePath, NULL))
+    {
+        if (!PermissionUtils_CheckOwnerUid(config->aduShellFilePath, 0 /* root */))
         {
-            Log_Error("'%s' has incorrect UID.", path);
+            Log_Error("'%s' has incorrect UID.", config->aduShellFilePath);
             goto done;
         }
 
-        if (!PermissionUtils_CheckOwnership(path, NULL /* user */, ADUC_FILE_GROUP))
+        if (!PermissionUtils_CheckOwnership(config->aduShellFilePath, NULL /* user */, ADUC_FILE_GROUP))
         {
-            Log_Error("'%s' has incorrect group owner.", path);
+            Log_Error("'%s' has incorrect group owner.", config->aduShellFilePath);
             goto done;
         }
 
+        // clang-format off
         // Needs set-uid, user read, and group read + execute.
         // Note: other has no permission bits set.
-        const mode_t expected_permissions = S_ISUID | S_IRUSR | S_IXUSR | S_IRGRP | S_IXGRP;
+        const mode_t expected_permissions =
+            S_ISUID |           // set-uid
+            S_IRUSR | S_IXUSR | // R-X user
+            S_IRGRP | S_IXGRP;  // R-X group
+        // clang-format on
 
-        if (!PermissionUtils_VerifyFilemodeExact(path, expected_permissions))
+        if (!PermissionUtils_VerifyFilemodeExact(config->aduShellFilePath, expected_permissions))
         {
-            Log_Error("Lookup failed or '%s' has incorrect permissions (expected: 0%o)", path, expected_permissions);
+            Log_Error(
+                "Lookup failed or '%s' has incorrect permissions (expected: 0%o)",
+                config->aduShellFilePath,
+                expected_permissions);
             goto done;
         }
     }
     else
     {
-        Log_Error("'%s' does not exist or not a file", ADUSHELL_FILE_PATH);
+        Log_Error("'%s' does not exist or not a file", config->aduShellFilePath);
         goto done;
     }
 
@@ -468,6 +538,7 @@ static _Bool CheckShellBinary()
 
 done:
 
+    ADUC_ConfigInfo_ReleaseInstance(config);
     return result;
 }
 
@@ -475,9 +546,9 @@ done:
  * @brief Helper function for checking correct ownership and permissions for dirs and files.
  * @return true if dirs and files have correct ownership and permissions.
  */
-static _Bool AreDirAndFilePermissionsValid()
+static bool AreDirAndFilePermissionsValid()
 {
-    _Bool result = true;
+    bool result = true;
 
     if (!ReportUserAndGroupRequirements())
     {
@@ -529,19 +600,22 @@ static _Bool AreDirAndFilePermissionsValid()
  *     - Implicitly check that agent process launched successfully.
  *     - Check that we can obtain the connection info.
  *
+ * @remark This function requires that the ADUC_ConfigInfo singleton has been initialized.
+ *
  * @return true if all checks passed.
  */
-_Bool HealthCheck(const ADUC_LaunchArguments* launchArgs)
+bool HealthCheck(const ADUC_LaunchArguments* launchArgs)
 {
-    _Bool isHealthy = false;
+    bool isHealthy = false;
 
-    ADUC_ConfigInfo config = {};
-    if (!ADUC_ConfigInfo_Init(&config, ADUC_CONF_FILE_PATH))
+    const ADUC_ConfigInfo* config = ADUC_ConfigInfo_GetInstance();
+    if (config == NULL)
     {
-        Log_Warn("Cannot read configuration file: %s", ADUC_CONF_FILE_PATH);
+        Log_Error("ADUC_ConfigInfo singleton hasn't been initialized.");
+        goto done;
     }
 
-    if (!IsConnectionInfoValid(launchArgs, &config))
+    if (!IsConnectionInfoValid(launchArgs, config))
     {
         Log_Error("Invalid connection info.");
         goto done;
@@ -552,19 +626,11 @@ _Bool HealthCheck(const ADUC_LaunchArguments* launchArgs)
         goto done;
     }
 
-#ifdef ADUC_PLATFORM_SIMULATOR
-    if (IsSimulatingUnhealthyState(&config))
-    {
-        Log_Error("Simulating an unhealthy state.");
-        goto done;
-    }
-#endif
-
     isHealthy = true;
 
 done:
     Log_Info("Health check %s.", isHealthy ? "passed" : "failed");
-    ADUC_ConfigInfo_UnInit(&config);
+    ADUC_ConfigInfo_ReleaseInstance(config);
 
     return isHealthy;
 }

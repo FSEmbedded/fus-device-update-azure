@@ -13,15 +13,9 @@ namespace Shell
 {
 namespace Const
 {
-const char* adu_shell = "/usr/lib/adu/adu-shell";
-
 const char* update_type_opt = "--update-type";
 const char* update_type_microsoft_apt = "microsoft/apt";
-const char* update_type_microsoft_swupdate = "microsoft/swupdate";
 const char* update_type_microsoft_script = "microsoft/script";
-const char* update_type_fus_firmware = "fus/firmware";
-const char* update_type_fus_application = "fus/application";
-const char* update_type_fus_update = "fus/update";
 const char* update_type_common = "common";
 const char* update_action_opt = "--update-action";
 const char* update_action_initialize = "initialize";
@@ -36,6 +30,8 @@ const char* update_action_execute = "execute";
 const char* target_data_opt = "--target-data";
 const char* target_options_opt = "--target-options";
 const char* target_log_folder_opt = "--target-log-folder";
+
+const char* config_folder_opt = "--config-folder";
 } // namespace Const
 } // namespace Shell
 } // namespace Adu

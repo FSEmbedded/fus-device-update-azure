@@ -32,9 +32,9 @@ extern ADUC_ClientHandle g_iotHubClientHandleForDeviceInfoComponent;
  * @param[out] componentContext Optional context object to use in related calls.
  * @param argc Count of arguments in @p argv
  * @param argv Command line parameters.
- * @return _Bool True on success.
+ * @return bool True on success.
  */
-_Bool DeviceInfoInterface_Create(void** componentContext, int argc, char** argv);
+bool DeviceInfoInterface_Create(void** componentContext, int argc, char** argv);
 
 /**
  * @brief Called after connected to IoTHub (device client handler is valid).
@@ -56,10 +56,8 @@ void DeviceInfoInterface_Destroy(void** componentContext);
 
 /**
  * @brief Report any changed DeviceInfo properties up to server.
- *
- * @return DIGITALTWIN_CLIENT_RESULT Result code.
  */
-IOTHUB_CLIENT_RESULT DeviceInfoInterface_ReportChangedPropertiesAsync();
+void DeviceInfoInterface_ReportChangedPropertiesAsync();
 
 EXTERN_C_END
 

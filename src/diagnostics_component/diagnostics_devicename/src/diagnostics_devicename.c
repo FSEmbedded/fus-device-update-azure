@@ -8,13 +8,13 @@
 
 #include "diagnostics_devicename.h"
 
-#include <azure_c_shared_utility/crt_abstractions.h>
+#include <azure_c_shared_utility/crt_abstractions.h> // mallocAndStrcpy_s
 #include <azure_c_shared_utility/strings.h>
 #include <string.h>
 
 static STRING_HANDLE s_DiagnosticsDeviceName = NULL;
 
-_Bool DiagnosticsComponent_SetDeviceName(const char* deviceId, const char* moduleId)
+bool DiagnosticsComponent_SetDeviceName(const char* deviceId, const char* moduleId)
 {
     if (deviceId == NULL)
     {
@@ -56,7 +56,7 @@ _Bool DiagnosticsComponent_SetDeviceName(const char* deviceId, const char* modul
     return true;
 }
 
-_Bool DiagnosticsComponent_GetDeviceName(char** deviceNameHandle)
+bool DiagnosticsComponent_GetDeviceName(char** deviceNameHandle)
 {
     if (mallocAndStrcpy_s(deviceNameHandle, STRING_c_str(s_DiagnosticsDeviceName)) != 0)
     {

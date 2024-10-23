@@ -6,42 +6,40 @@
  * Licensed under the MIT License.
  */
 #include "aduc/extension_utils.h"
+#include "aduc/config_utils.h"
 #include "aduc/hash_utils.h"
 #include "aduc/logging.h"
 #include "aduc/parser_utils.h"
+#include "aduc/path_utils.h" // PathUtils_SanitizePathSegment
 #include "aduc/string_c_utils.h"
 #include "aduc/system_utils.h"
 
-#include <grp.h> // for getgrnam
-#include <pwd.h> // for getpwnam
+#include <ctype.h> // isalnum
+#include <sys/stat.h> // stat
+
+#include <aducpal/grp.h> // getgrnam
+#include <aducpal/pwd.h> // getpwnam
+#include <aducpal/sys_stat.h> // S_I*
+
+#include <parson.h> // for JSON_*, json_*
 #include <stdio.h> // for FILE
 #include <stdlib.h> // for calloc
-#include <strings.h> // for strcasecmp
-#include <sys/stat.h>
 
 #include <azure_c_shared_utility/azure_base64.h>
 #include <azure_c_shared_utility/buffer_.h>
 #include <azure_c_shared_utility/crt_abstractions.h> // for mallocAndStrcpy_s
 #include <azure_c_shared_utility/sha.h> // for SHAversion
 
-static STRING_HANDLE FolderNameFromHandlerId(const char* handlerId)
-{
-    STRING_HANDLE name = STRING_construct(handlerId);
-    STRING_replace(name, '/', '_');
-    STRING_replace(name, ':', '_');
-    return name;
-}
-
 /**
  * @brief Get the Extension File Entity object
  *
  * @param[in] extensionRegFile A full path to the extension registration file.
  * @param[in,out] fileEntity An output buffer to hold file entity data.
- * @return _Bool Returns 'true' if succeeded.
+ * @return bool Returns 'true' if succeeded.
  */
-_Bool GetExtensionFileEntity(const char* extensionRegFile, ADUC_FileEntity* fileEntity)
+bool GetExtensionFileEntity(const char* extensionRegFile, ADUC_FileEntity* fileEntity)
 {
-    _Bool found = false;
+    bool found = false;
     size_t tempHashCount = 0;
     ADUC_Hash* tempHash = NULL;
     const char* fileName = NULL;
@@ -99,6 +97,87 @@ done:
 }
 
 /**
+ * @brief Find a handler extension file entity for the specified @p handlerId.
+ *
+ * @param handlerId A string represents Update Type or Step Handler Type.
+ * @param fileEntity An output file entity.
+ * @return True if a handler for specified @p handlerId is available.
+ */
+static bool GetHandlerExtensionFileEntity(
+    const char* handlerId, const char* extensionDir, const char* regFileName, ADUC_FileEntity* fileEntity)
+{
+    bool found = false;
+
+    if (IsNullOrEmpty(handlerId))
+    {
+        Log_Error("Invalid handler identifier.");
+        return false;
+    }
+
+    if (fileEntity == NULL)
+    {
+        Log_Error("Invalid output buffer.");
+        return false;
+    }
+
+    memset(fileEntity, 0, sizeof(*fileEntity));
+
+    STRING_HANDLE folderName = PathUtils_SanitizePathSegment(handlerId);
+
+    STRING_HANDLE path = STRING_construct_sprintf("%s/%s/%s", extensionDir, STRING_c_str(folderName), regFileName);
+
+    found = GetExtensionFileEntity(STRING_c_str(path), fileEntity);
+
+    STRING_delete(folderName);
+    STRING_delete(path);
+
+    return found;
+}
+
+/**
+ * @brief Find a step handler for the specified UpdateType @p updateType.
+ *
+ * @param updateType Update type string.
+ * @param fileEntity An output file entity.
+ * @return True if a step handler for the specified @p updateType is available.
+ */
+bool GetUpdateContentHandlerFileEntity(const char* updateType, ADUC_FileEntity* fileEntity)
+{
+    bool ret = false;
+    const ADUC_ConfigInfo* config = ADUC_ConfigInfo_GetInstance();
+    if (config != NULL)
+    {
+        ret = GetHandlerExtensionFileEntity(
+            updateType, config->extensionsStepHandlerFolder, ADUC_UPDATE_CONTENT_HANDLER_REG_FILENAME, fileEntity);
+        ADUC_ConfigInfo_ReleaseInstance(config);
+    }
+    return ret;
+}
+
+/**
+ * @brief Find a download handler for the specified DownloadHandler @p downloadHandlerId.
+ *
+ * @param downloadHandlerId The download handler id string.
+ * @param fileEntity An output file entity.
+ * @return True if a step handler for the specified @p downloadHandlerId is available.
+ */
+bool GetDownloadHandlerFileEntity(const char* downloadHandlerId, ADUC_FileEntity* fileEntity)
+{
+    bool ret = false;
+    const ADUC_ConfigInfo* config = ADUC_ConfigInfo_GetInstance();
+    if (config != NULL)
+    {
+        ret = GetHandlerExtensionFileEntity(
+            downloadHandlerId,
+            config->extensionsDownloadHandlerFolder,
+            ADUC_DOWNLOAD_HANDLER_REG_FILENAME,
+            fileEntity);
+        ADUC_ConfigInfo_ReleaseInstance(config);
+    }
+    return ret;
+}
+
+/**
  * @brief Register a handler for specified handler id.
  *
  * @param handlerId A string represents handler id. This can be an Update-Type, or Step-Handler-Type.
@@ -107,13 +186,13 @@ done:
  * @param handlerRegistrationFileName A handler registration file name.
  * @return Returns true if the handler successfully registered.
  */
-static _Bool RegisterHandlerExtension(
+static bool RegisterHandlerExtension(
     const char* handlerId,
     const char* handlerFilePath,
     const char* handlerExtensionDir,
     const char* handlerRegistrationFileName)
 {
-    _Bool success = false;
+    bool success = false;
     STRING_HANDLE folderName = NULL;
     STRING_HANDLE dir = NULL;
     STRING_HANDLE content = NULL;
@@ -135,7 +214,7 @@ static _Bool RegisterHandlerExtension(
         goto done;
     }
 
-    folderName = FolderNameFromHandlerId(handlerId);
+    folderName = PathUtils_SanitizePathSegment(handlerId);
     if (folderName == NULL)
     {
         Log_Error("Cannot generate a folder name from an Update Type.");
@@ -151,7 +230,7 @@ static _Bool RegisterHandlerExtension(
     // Note: the return value may point to a static area,
     // and may be overwritten by subsequent calls to getpwent(3), getpwnam(), or getpwuid().
     // (Do not pass the returned pointer to free(3).)
-    struct passwd* pwd = getpwnam(ADUC_FILE_USER);
+    struct passwd* pwd = ADUCPAL_getpwnam(ADUC_FILE_USER);
     if (pwd == NULL)
     {
         Log_Error("Cannot verify credential of 'adu' user.");
@@ -163,7 +242,7 @@ static _Bool RegisterHandlerExtension(
     // Note: The return value may point to a static area,
     // and may be overwritten by subsequent calls to getgrent(3), getgrgid(), or getgrnam().
     // (Do not pass the returned pointer to free(3).)
-    struct group* grp = getgrnam(ADUC_FILE_GROUP);
+    struct group* grp = ADUCPAL_getgrnam(ADUC_FILE_GROUP);
     if (grp == NULL)
     {
         Log_Error("Cannot get 'adu' group info.");
@@ -256,13 +335,46 @@ done:
  * @param handlerFilePath A full path to the handler shared-library file.
  * @return Returns true if the handler successfully registered.
  */
-_Bool RegisterUpdateContentHandler(const char* updateType, const char* handlerFilePath)
+bool RegisterUpdateContentHandler(const char* updateType, const char* handlerFilePath)
 {
-    return RegisterHandlerExtension(
-        updateType,
-        handlerFilePath,
-        ADUC_UPDATE_CONTENT_HANDLER_EXTENSION_DIR,
-        ADUC_UPDATE_CONTENT_HANDLER_REG_FILENAME);
+    bool ret = false;
+    const ADUC_ConfigInfo* config = ADUC_ConfigInfo_GetInstance();
+    if (config != NULL)
+    {
+        ret = RegisterHandlerExtension(
+            updateType,
+            handlerFilePath,
+            config->extensionsStepHandlerFolder,
+            ADUC_UPDATE_CONTENT_HANDLER_REG_FILENAME);
+
+        ADUC_ConfigInfo_ReleaseInstance(config);
+    }
+
+    return ret;
+}
+
+/**
+ * @brief Register a Handler for the specified download handler id.
+ *
+ * @param downloadHandlerId The download handler id string.
+ * @param handlerFilePath A full path to the handler shared-library file.
+ * @return Returns true if the handler successfully registered.
+ */
+bool RegisterDownloadHandler(const char* downloadHandlerId, const char* handlerFilePath)
+{
+    bool ret = false;
+    const ADUC_ConfigInfo* config = ADUC_ConfigInfo_GetInstance();
+    if (config != NULL)
+    {
+        ret = RegisterHandlerExtension(
+            downloadHandlerId,
+            handlerFilePath,
+            config->extensionsDownloadHandlerFolder,
+            ADUC_DOWNLOAD_HANDLER_REG_FILENAME);
+
+        ADUC_ConfigInfo_ReleaseInstance(config);
+    }
+    return ret;
 }
 
 /**
@@ -270,9 +382,17 @@ _Bool RegisterUpdateContentHandler(const char* updateType, const char* handlerFi
  * @param extensionFilePath A full path to an extension to register.
  * @return Returns true if the extension successfully registered.
  */
-_Bool RegisterComponentEnumeratorExtension(const char* extensionFilePath)
+bool RegisterComponentEnumeratorExtension(const char* extensionFilePath)
 {
-    return RegisterExtension(ADUC_COMPONENT_ENUMERATOR_EXTENSION_DIR, extensionFilePath);
+    bool ret = false;
+    const ADUC_ConfigInfo* config = ADUC_ConfigInfo_GetInstance();
+    if (config != NULL)
+    {
+        ret = RegisterExtension(config->extensionsComponentEnumeratorFolder, extensionFilePath);
+
+        ADUC_ConfigInfo_ReleaseInstance(config);
+    }
+    return ret;
 }
 
 /**
@@ -280,9 +400,17 @@ _Bool RegisterComponentEnumeratorExtension(const char* extensionFilePath)
  * @param extensionFilePath A full path to an extension to register.
  * @return Returns true if the extension successfully registered.
  */
-_Bool RegisterContentDownloaderExtension(const char* extensionFilePath)
+bool RegisterContentDownloaderExtension(const char* extensionFilePath)
 {
-    return RegisterExtension(ADUC_CONTENT_DOWNLOADER_EXTENSION_DIR, extensionFilePath);
+    bool ret = false;
+    const ADUC_ConfigInfo* config = ADUC_ConfigInfo_GetInstance();
+    if (config != NULL)
+    {
+        ret = RegisterExtension(config->extensionsContentDownloaderFolder, extensionFilePath);
+
+        ADUC_ConfigInfo_ReleaseInstance(config);
+    }
+    return ret;
 }
 
 /**
@@ -291,11 +419,11 @@ _Bool RegisterContentDownloaderExtension(const char* extensionFilePath)
  * @param extensionFilePath A full path to an extension to register.
  * @return Returns true if the extension successfully registered.
  */
-_Bool RegisterExtension(const char* extensionDir, const char* extensionFilePath)
+bool RegisterExtension(const char* extensionDir, const char* extensionFilePath)
 {
     Log_Debug("Registering an extension, target dir: %s, file: %s", extensionDir, extensionFilePath);
 
-    _Bool success = false;
+    bool success = false;
     char* hash = NULL;
     STRING_HANDLE content = NULL;
     STRING_HANDLE outFilePath = NULL;
@@ -318,7 +446,7 @@ _Bool RegisterExtension(const char* extensionDir, const char* extensionFilePath)
     // Note: the return value may point to a static area,
     // and may be overwritten by subsequent calls to getpwent(3), getpwnam(), or getpwuid().
     // (Do not pass the returned pointer to free(3).)
-    pwd = getpwnam(ADUC_FILE_USER);
+    pwd = ADUCPAL_getpwnam(ADUC_FILE_USER);
     if (pwd == NULL)
     {
         Log_Error("Cannot verify credential of 'adu' user.");
@@ -331,7 +459,7 @@ _Bool RegisterExtension(const char* extensionDir, const char* extensionFilePath)
     // Note: The return value may point to a static area,
     // and may be overwritten by subsequent calls to getgrent(3), getgrgid(), or getgrnam().
     // (Do not pass the returned pointer to free(3).)
-    grp = getgrnam(ADUC_FILE_GROUP);
+    grp = ADUCPAL_getgrnam(ADUC_FILE_GROUP);
     if (grp == NULL)
     {
         Log_Error("Cannot get 'adu' group info.");

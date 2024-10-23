@@ -52,7 +52,7 @@ void ADUC_WorkflowData_SetLastReportedState(ADUCITF_State newState, ADUC_Workflo
  * @param[out] workflowData The workflow data from which the workflow id will be read(from its WorkflowHandle opaque object) and to which the workflow id will be written.
  * @return true if succeeded in setting the last completed workflow id.
  */
-_Bool ADUC_WorkflowData_SetLastCompletedWorkflowId(const char* completedWorkflowId, ADUC_WorkflowData* workflowData);
+bool ADUC_WorkflowData_SetLastCompletedWorkflowId(const char* completedWorkflowId, ADUC_WorkflowData* workflowData);
 
 /**
  * @brief Gets a copy of the sandbox work folder path
@@ -78,8 +78,6 @@ char* ADUC_WorkflowData_GetWorkflowId(const ADUC_WorkflowData* workflowData);
  */
 char* ADUC_WorkflowData_GetUpdateType(const ADUC_WorkflowData* workflowData);
 
-int ADUC_WorkflowData_GetUpdateSize(const ADUC_WorkflowData* workflowData);
-
 /**
  * @brief Gets the installed criteria of the workflow
  *
@@ -89,44 +87,11 @@ int ADUC_WorkflowData_GetUpdateSize(const ADUC_WorkflowData* workflowData);
 char* ADUC_WorkflowData_GetInstalledCriteria(const ADUC_WorkflowData* workflowData);
 
 /**
- * @brief Gets the function that reboots the system.
+ * @brief Creates a Workflow for the WorkflowHandle of the workflow data.
  *
- * @param workflowData The workflow data.
- * @return RebootSystemFunc The function that reboots the system.
+ * @param workflowData The workflow data for which WorkflowHandle will be initialized.
  */
-RebootSystemFunc ADUC_WorkflowData_GetRebootSystemFunc(const ADUC_WorkflowData* workflowData);
-
-/**
- * @brief Gets the function for restarting the agent process.
- *
- * @param workflowData The workflow data.
- * @return RestartAgentFunc The restart agent function.
- */
-RestartAgentFunc ADUC_WorkflowData_GetRestartAgentFunc(const ADUC_WorkflowData* workflowData);
-
-/**
- * @brief Gets the function for updating the workflow state machine state with result.
- *
- * @param workflowData The workflow data.
- * @return SetUpdateStateWithResultFunc The function for updating the workflow state with result.
- */
-SetUpdateStateWithResultFunc ADUC_WorkflowData_GetSetUpdateStateWithResultFunc(const ADUC_WorkflowData* workflowData);
-
-/**
- * @brief Gets the function for handling a new incoming update action
- *
- * @param workflowData The workflow data.
- * @return HandleUpdateActionFunc The function for handling update action.
- */
-HandleUpdateActionFunc ADUC_WorkflowData_GetHandleUpdateActionFunc(const ADUC_WorkflowData* workflowData);
-
-/**
- * @brief Save the goal state json string used (re-process), as needed, after deployment is completed.
- *
- * @param workflowData The workflow data.
- * @param goalStateJson A serialized json string containing the last Goal State data.
- */
-void ADUC_WorkflowData_SaveLastGoalStateJson(ADUC_WorkflowData* workflowData, const char* goalStateJson);
+bool ADUC_WorkflowData_InitWorkflowHandle(ADUC_WorkflowData* workflowData);
 
 EXTERN_C_END
 

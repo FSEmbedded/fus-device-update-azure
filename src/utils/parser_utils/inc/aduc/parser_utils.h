@@ -20,9 +20,9 @@ EXTERN_C_BEGIN
 //  * @param updateActionJson The update action JSON.
 //  * @param jsonFieldName The name of the JSON field to get.
 //  * @param value The buffer to fill with the value from the JSON field. Caller must call free().
-//  * @return _Bool true if call succeeded. false otherwise.
+//  * @return bool true if call succeeded. false otherwise.
 //  */
-// _Bool ADUC_JSON_GetStringField(const JSON_Value* updateActionJson, const char* jsonFieldName, char** value);
+// bool ADUC_JSON_GetStringField(const JSON_Value* updateActionJson, const char* jsonFieldName, char** value);
 
 // /**
 //  * @brief Returns the pointer to the @p jsonFieldName from the JSON_Value
@@ -54,21 +54,8 @@ JSON_Value* ADUC_JSON_GetUpdateManifestRoot(const JSON_Value* updateActionJson);
 ADUC_Hash* ADUC_HashArray_AllocAndInit(const JSON_Object* hashObj, size_t* hashCount);
 
 /**
- * @brief Parse the update action JSON into a ADUC_FileEntity structure.
- * This function returns only files listed in 'updateManifest' property
- * The ADUC_FileEntity.DownloadUrl will be polulated with download url in 'fileUrls' entry selected by 'fileId'.
- *
- * @param updateActionJson UpdateAction Json to parse
- * @param fileCount Returned number of files.
- * @param files ADUC_FileEntity array (size fileCount). Array to be freed using ADUC_FileEntityArray_Free().
- * free(), objects must also be freed.
- * @return _Bool Success state.
- */
-_Bool ADUC_Json_GetFiles(const JSON_Value* updateActionJson, unsigned int* fileCount, ADUC_FileEntity** files);
-
-/**
  * @brief Initializes the file entity
- * @param file the file entity to be initialized
+ * @param fileEntity the file entity to be initialized. Caller MUST zero-out before calling.
  * @param fileId fileId for @p fileEntity
  * @param targetFileName fileName for @p fileEntity
  * @param downloadUri downloadUri for @p fileEntity
@@ -78,7 +65,7 @@ _Bool ADUC_Json_GetFiles(const JSON_Value* updateActionJson, unsigned int* fileC
  * @param sizeInBytes file size (in bytes)
  * @returns True on success and false on failure
  */
-_Bool ADUC_FileEntity_Init(
+bool ADUC_FileEntity_Init(
     ADUC_FileEntity* fileEntity,
     const char* fileId,
     const char* targetFileName,
@@ -101,17 +88,6 @@ void ADUC_FileEntity_Uninit(ADUC_FileEntity* entity);
  * @param files a pointer to an array of ADUC_FileEntity objects
  */
 void ADUC_FileEntityArray_Free(unsigned int fileCount, ADUC_FileEntity* files);
-
-/**
- * @brief Parse the update action JSON into a ADUC_FileUrls structure.
- * This function returns all entries listed in 'fileUrls' property.
- *
- * @param updateActionJson UpdateAction Json to parse
- * @param urlCount Returned number of urls.
- * @param urls ADUC_FileEntity (size fileCount). Array to be freed using free(), objects must also be freed.
- * @return _Bool Success state.
- */
-_Bool ADUC_Json_GetFileUrls(const JSON_Value* updateActionJson, unsigned int* urlCount, ADUC_FileEntity** urls);
 
 /**
  * @brief Free memory allocated for the specified ADUC_FileEntity object's member.
@@ -146,9 +122,19 @@ void ADUC_FileUrlArray_Free(unsigned int fileCount, ADUC_FileUrl* fileUrls);
  *
  * @param updateActionJson UpdateAction JSON to parse.
  * @param updateId The returned installed content ID string. Caller must call free().
- * @return _Bool True if call was successful.
+ * @return bool True if call was successful.
  */
-_Bool ADUC_Json_GetUpdateId(const JSON_Value* updateActionJson, struct tagADUC_UpdateId** updateId);
+bool ADUC_Json_GetUpdateId(const JSON_Value* updateActionJson, struct tagADUC_UpdateId** updateId);
+
+/**
+ * @brief Allocates and sets the UpdateId fields
+ * @param provider the provider for the UpdateId
+ * @param name the name for the UpdateId
+ * @param version the version for the UpdateId
+ *
+ * @returns An UpdateId on success, NULL on failure
+ */
+ADUC_UpdateId* ADUC_UpdateId_AllocAndInit(const char* provider, const char* name, const char* version);
 
 EXTERN_C_END
 

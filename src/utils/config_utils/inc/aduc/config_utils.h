@@ -11,14 +11,14 @@
 
 #ifdef ENABLE_MOCKS
 
-#   undef ENABLE_MOCKS
-#   include "azure_c_shared_utility/strings.h"
-#   include "azure_c_shared_utility/vector.h"
-#   define ENABLE_MOCKS
+#    undef ENABLE_MOCKS
+#    include "azure_c_shared_utility/strings.h"
+#    include "azure_c_shared_utility/vector.h"
+#    define ENABLE_MOCKS
 
 #else
-#   include "azure_c_shared_utility/strings.h"
-#   include "azure_c_shared_utility/vector.h"
+#    include "azure_c_shared_utility/strings.h"
+#    include "azure_c_shared_utility/vector.h"
 
 #endif
 
@@ -26,6 +26,8 @@
 #include <parson.h>
 #include <stdbool.h>
 #include <umock_c/umock_c_prod.h>
+
+#define ADUC_CONFIG_FOLDER_ENV "ADUC_CONF_FOLDER"
 
 EXTERN_C_BEGIN
 
@@ -35,25 +37,15 @@ typedef struct tagADUC_AgentInfo
 
     char* runas; /**< Run as a trusted user. */
 
-    char* connectionType; /**< It can be either AIS, string or x509. */
+    char* connectionType; /**< It can be either AIS or string. */
 
-    char* connectionData; /**< the name in AIS principal (AIS); or the connectionString (conncetionType string). */
+    char* connectionData; /**< the name in AIS principal (AIS); or the connectionString (connectionType string). */
 
     char* manufacturer; /**< Device property manufacturer. */
 
     char* model; /**< Device property model. */
 
-    char* x509_container; /**< Where to search for the x509 credentials. */
-
-    char* x509_cert; /**< How the certificate for the x509 secured encrypted connection is named. */
-
-    char* x509_key; /**< How the key for the x509 certificate is named to secure the connection. */
-
-    char* device_id; /**< Device ID of th device thast should communicate. */
-
-    char* iotHubName; /**< The name of the used IoT-Hub. */
-
-    char* iotHubSuffix; /**< The URI-suffix of the used IoT-Hub. */
+    JSON_Object* additionalDeviceProperties; /**< Additional device properties. */
 
 } ADUC_AgentInfo;
 
@@ -63,24 +55,67 @@ typedef struct tagADUC_AgentInfo
 
 typedef struct tagADUC_ConfigInfo
 {
-    char* schemaVersion;
+    int refCount; /**< A reference count for this object. */
+
+    JSON_Value* rootJsonValue; /**< The root value of the configuration. */
+
+    const char* schemaVersion; /**< The version of the schema for the configuration. */
 
     JSON_Array* aduShellTrustedUsers; /**< All the trusted users for ADU shell. */
 
-    char* manufacturer; /**< Device info manufacturer. */
+    const char* manufacturer; /**< Device info manufacturer. */
 
-    char* model; /**< Device info model. */
+    const char* model; /**< Device info model. */
 
-    bool simulateUnhealthyState; /**< A configuration for simulator. */
-
-    char* edgegatewayCertPath; /**< Edge gateway certificate path */
+    const char* edgegatewayCertPath; /**< Edge gateway certificate path */
 
     ADUC_AgentInfo* agents; /**< Array of agents that are configured. */
 
-    unsigned int agentCount; /**< Total number of agents configured. */
+    size_t agentCount; /**< Total number of agents configured. */
 
-    char* compatPropertyNames; /**< Compat property names. */
+    const char* compatPropertyNames; /**< Compat property names. */
+
+    const char* iotHubProtocol; /**< The IotHub transport protocol to use. */
+
+    unsigned int
+        downloadTimeoutInMinutes; /**< The timeout for downloading an update payload. A value of zero means to use the default. */
+
+    const char* aduShellFolder; /**< The folder where ADU shell is installed. */
+
+    char* aduShellFilePath; /**< The full path to ADU shell binary. */
+
+    char* configFolder; /**< The folder where ADU stores its configuration. */
+
+    const char* dataFolder; /**< The folder where ADU stores its data. */
+
+    const char* downloadsFolder; /**< The folder where ADU stores downloaded payloads. */
+
+    const char* extensionsFolder; /**< The folder where ADU stores its extensions. */
+
+    char* extensionsComponentEnumeratorFolder; /**< The folder where ADU stores its component enumerator extensions. */
+
+    char* extensionsContentDownloaderFolder; /**< The folder where ADU stores its content downloader extensions. */
+
+    char* extensionsStepHandlerFolder; /**< The folder where ADU stores its step handler extensions. */
+
+    char* extensionsDownloadHandlerFolder; /**< The folder where ADU stores its downloader handler extensions. */
 } ADUC_ConfigInfo;
+
+/**
+ * @brief Create the ADUC_ConfigInfo object.
+ *
+ * @return const ADUC_ConfigInfo* a pointer to ADUC_ConfigInfo object. NULL if failure.
+ * Caller must call ADUC_ConfigInfo_Release to free the object.
+ */
+const ADUC_ConfigInfo* ADUC_ConfigInfo_GetInstance();
+
+/**
+ * @brief Release the ADUC_ConfigInfo object.
+ *
+ * @param configInfo a pointer to ADUC_ConfigInfo object
+ * @return int The reference count of the ADUC_ConfigInfo object after released.
+ */
+int ADUC_ConfigInfo_ReleaseInstance(const ADUC_ConfigInfo* configInfo);
 
 /**
  * @brief Allocates the memory for the ADUC_ConfigInfo struct member values
@@ -88,7 +123,7 @@ typedef struct tagADUC_ConfigInfo
  * @param configFilePath The path of configuration file
  * @returns True if successfully allocated, False if failure
  */
-_Bool ADUC_ConfigInfo_Init(ADUC_ConfigInfo* config, const char* configFilePath);
+bool ADUC_ConfigInfo_Init(ADUC_ConfigInfo* config, const char* configFilePath);
 
 /**
  * @brief Free members of ADUC_ConfigInfo object.
@@ -104,7 +139,7 @@ void ADUC_ConfigInfo_UnInit(ADUC_ConfigInfo* config);
  * @param index
  * @return const ADUC_AgentInfo*, NULL if failure
  */
-const ADUC_AgentInfo* ADUC_ConfigInfo_GetAgent(ADUC_ConfigInfo* config, unsigned int index);
+const ADUC_AgentInfo* ADUC_ConfigInfo_GetAgent(const ADUC_ConfigInfo* config, unsigned int index);
 
 /**
  * @brief Get the adu trusted user list

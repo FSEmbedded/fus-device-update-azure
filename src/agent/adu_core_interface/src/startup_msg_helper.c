@@ -6,13 +6,12 @@
  * Licensed under the MIT License.
  */
 
-#include "device_properties.h"
 #include "startup_msg_helper.h"
+#include "device_properties.h"
 
-#include <aduc/adu_core_json.h>
-#include <aduc/config_utils.h>
 #include <aduc/logging.h>
 #include <aduc/string_c_utils.h>
+#include <aduc/types/update_content.h> // ADUCITF_FIELDNAME_DEVICEPROPERTIES, etc.
 #include <azure_c_shared_utility/crt_abstractions.h>
 
 /**
@@ -23,16 +22,17 @@
 /**
  * @brief Adds the deviceProperties to the @p startupObj
  * @param startupObj the JSON Object which will have the device properties added to it
+ * @param agent the ADUC_AgentInfo that contains the agent info
  * @returns true on successful addition, false on failure
  */
-_Bool StartupMsg_AddDeviceProperties(JSON_Object* startupObj)
+bool StartupMsg_AddDeviceProperties(JSON_Object* startupObj, const ADUC_AgentInfo* agent)
 {
     if (startupObj == NULL)
     {
         return false;
     }
 
-    _Bool success = false;
+    bool success = false;
 
     JSON_Value* devicePropsValue = json_value_init_object();
 
@@ -43,12 +43,22 @@ _Bool StartupMsg_AddDeviceProperties(JSON_Object* startupObj)
         goto done;
     }
 
-    if (!DeviceProperties_AddManufacturerAndModel(devicePropsObj))
+    if (!DeviceProperties_AddManufacturerAndModel(devicePropsObj, agent))
     {
         goto done;
     }
 
-    if (!DeviceProperties_AddInterfaceId(devicePropsObj))
+    if (!DeviceProperties_AddAdditionalProperties(devicePropsObj, agent))
+    {
+        goto done;
+    }
+
+    if (!DeviceProperties_ClearInterfaceId(devicePropsObj))
+    {
+        goto done;
+    }
+
+    if (!DeviceProperties_AddContractModelId(devicePropsObj))
     {
         goto done;
     }
@@ -76,37 +86,36 @@ done:
         Log_Error("Adding deviceProperties properties failed.");
         json_value_free(devicePropsValue);
     }
-
     return success;
 }
 
 /**
  * @brief Adds the compatPropertyNames to the @p startupObj
  * @param startupObj the JSON Object which will have the compatPropertyNames from config added to it
+ * @remark This function requires that the ADUC_ConfigInfo singleton has been initialized.
  * @returns true on successful addition, false on failure
  */
-_Bool StartupMsg_AddCompatPropertyNames(JSON_Object* startupObj)
+bool StartupMsg_AddCompatPropertyNames(JSON_Object* startupObj)
 {
     if (startupObj == NULL)
     {
         return false;
     }
 
-    _Bool success = false;
-
-    ADUC_ConfigInfo config = {};
-
-    if (!ADUC_ConfigInfo_Init(&config, ADUC_CONF_FILE_PATH))
+    const ADUC_ConfigInfo* config = ADUC_ConfigInfo_GetInstance();
+    if (config == NULL)
     {
-        Log_Warn("Could not initialize config at: %s", ADUC_CONF_FILE_PATH);
+        Log_Error("ADUC_ConfigInfo singleton hasn't been initialized");
+        return false;
     }
+
+    bool success = false;
 
     JSON_Status jsonStatus = json_object_set_string(
         startupObj,
         ADUCITF_FIELDNAME_COMPAT_PROPERTY_NAMES,
-        IsNullOrEmpty(config.compatPropertyNames)
-            ? DEFAULT_COMPAT_PROPERTY_NAMES_VALUE
-            : config.compatPropertyNames);
+        IsNullOrEmpty(config->compatPropertyNames) ? DEFAULT_COMPAT_PROPERTY_NAMES_VALUE
+                                                   : config->compatPropertyNames);
 
     if (jsonStatus != JSONSuccess)
     {
@@ -118,7 +127,6 @@ _Bool StartupMsg_AddCompatPropertyNames(JSON_Object* startupObj)
 
 done:
 
-    ADUC_ConfigInfo_UnInit(&config);
-
+    ADUC_ConfigInfo_ReleaseInstance(config);
     return success;
 }

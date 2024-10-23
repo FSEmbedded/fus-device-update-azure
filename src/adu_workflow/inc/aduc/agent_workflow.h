@@ -9,15 +9,14 @@
 #define ADUC_AGENT_WORKFLOW_H
 
 #include "aduc/types/workflow.h"
-#include <stdbool.h> // for _Bool
+#include <stdbool.h> // for bool
 
 EXTERN_C_BEGIN
 
 void ADUC_Workflow_DoWork(ADUC_WorkflowData* workflowData);
 
-void ADUC_Workflow_HandlePropertyUpdate(ADUC_WorkflowData* currentWorkflowData, const unsigned char* propertyUpdateValue, bool forceDeferral);
-
-void ADUC_Workflow_HandleComponentChanged(ADUC_WorkflowData* workflowData);
+void ADUC_Workflow_HandlePropertyUpdate(
+    ADUC_WorkflowData* currentWorkflowData, const unsigned char* propertyUpdateValue, bool forceUpdate);
 
 void ADUC_Workflow_HandleUpdateAction(ADUC_WorkflowData* workflowData);
 
@@ -25,16 +24,17 @@ void ADUC_Workflow_TransitionWorkflow(ADUC_WorkflowData* workflowData);
 
 void ADUC_Workflow_HandleStartupWorkflowData(ADUC_WorkflowData* currentWorkflowData);
 
-const char* ADUC_Workflow_CancellationTypeToString(ADUC_WorkflowCancellationType cancellationType);
-
 //
 // Device Update Action data type and methods.
 //
+
+/** @brief MethdoCall_Data struct wrapper */
 typedef struct tagADUC_MethodCall_Data
 {
-    ADUC_WorkCompletionData WorkCompletionData;
-    ADUC_WorkflowData* WorkflowData;
+    ADUC_WorkCompletionData WorkCompletionData; //!< data for the work completion
+    ADUC_WorkflowData* WorkflowData; //!< The data for the workflow
 } ADUC_MethodCall_Data;
+
 
 void ADUC_Workflow_MethodCall_Idle(ADUC_WorkflowData* workflowData);
 
@@ -44,23 +44,29 @@ void ADUC_Workflow_MethodCall_ProcessDeployment_Complete(ADUC_MethodCall_Data* m
 ADUC_Result ADUC_Workflow_MethodCall_Download(ADUC_MethodCall_Data* methodCallData);
 void ADUC_Workflow_MethodCall_Download_Complete(ADUC_MethodCall_Data* methodCallData, ADUC_Result result);
 
+ADUC_Result ADUC_Workflow_MethodCall_Backup(ADUC_MethodCall_Data* methodCallData);
+void ADUC_Workflow_MethodCall_Backup_Complete(ADUC_MethodCall_Data* methodCallData, ADUC_Result result);
+
 ADUC_Result ADUC_Workflow_MethodCall_Install(ADUC_MethodCall_Data* methodCallData);
 void ADUC_Workflow_MethodCall_Install_Complete(ADUC_MethodCall_Data* methodCallData, ADUC_Result result);
 
 ADUC_Result ADUC_Workflow_MethodCall_Apply(ADUC_MethodCall_Data* methodCallData);
 void ADUC_Workflow_MethodCall_Apply_Complete(ADUC_MethodCall_Data* methodCallData, ADUC_Result result);
 
+ADUC_Result ADUC_Workflow_MethodCall_Restore(ADUC_MethodCall_Data* methodCallData);
+void ADUC_Workflow_MethodCall_Restore_Complete(ADUC_MethodCall_Data* methodCallData, ADUC_Result result);
+
 void ADUC_Workflow_MethodCall_Cancel(const ADUC_WorkflowData* workflowData);
 
 ADUC_Result ADUC_Workflow_MethodCall_IsInstalled(const ADUC_WorkflowData* workflowData);
-
 
 //
 // State transition
 //
 
 void ADUC_Workflow_SetUpdateState(ADUC_WorkflowData* workflowData, ADUCITF_State updateState);
-void ADUC_Workflow_SetUpdateStateWithResult(ADUC_WorkflowData* workflowData, ADUCITF_State updateState, ADUC_Result result);
+void ADUC_Workflow_SetUpdateStateWithResult(
+    ADUC_WorkflowData* workflowData, ADUCITF_State updateState, ADUC_Result result);
 void ADUC_Workflow_SetInstalledUpdateIdAndGoToIdle(ADUC_WorkflowData* workflowData, const char* updateId);
 
 void ADUC_Workflow_DefaultDownloadProgressCallback(

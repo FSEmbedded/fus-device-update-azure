@@ -5,14 +5,17 @@
  * @copyright Copyright (c) Microsoft Corporation.
  * Licensed under the MIT License.
  */
-#define _DEFAULT_SOURCE
 #include "aduc/permission_utils.h"
 #include "aduc/bit_ops.h" // for BitOps_AreAllBitsSet
-#include <grp.h> // for getgrnam
-#include <pwd.h> // for getpwnam
 #include <string.h> // for stat, etc.
 #include <sys/stat.h> // for stat, etc.
-#include <unistd.h> // for access
+
+#include <aducpal/grp.h> // getgrnam
+#include <aducpal/pwd.h> // getpwnam
+#include <aducpal/unistd.h> // seteuid, setegid
+#if defined(WIN32)
+#    include <aducpal/sys_stat.h> // S_ISUID
+#endif
 
 //
 // Internal functions
@@ -26,7 +29,7 @@
  * @param isExactMatch true to do exact match on permission bits of file; else, use expectedPermissions as a bit mask.
  * @returns true if file's permissions matched according to isExactMatch.
  */
-static _Bool PermissionUtils_VerifyFilemodeBits(const char* path, mode_t expectedPermissions, _Bool isExactMatch)
+static bool PermissionUtils_VerifyFilemodeBits(const char* path, mode_t expectedPermissions, bool isExactMatch)
 {
     struct stat st;
     if (stat(path, &st) != 0)
@@ -35,7 +38,22 @@ static _Bool PermissionUtils_VerifyFilemodeBits(const char* path, mode_t expecte
     }
 
     // keep just the file permission bits (as opposed to file_type bits).
-    mode_t permissionBits = st.st_mode & ~S_IFMT;
+    mode_t permissionBits = st.st_mode & ~(mode_t)S_IFMT;
+
+#if defined(WIN32)
+    // Windows only supports "owner" bits. Remove group and other bits.
+    permissionBits &= ~S_IRWXG;
+    permissionBits &= ~S_IRWXO;
+#endif
+
+#if defined(WIN32)
+    // Not supported on Windows.
+    expectedPermissions &= ~S_ISUID;
+
+    // Windows only supports "owner" bits. Remove group and other bits.
+    expectedPermissions &= ~S_IRWXG;
+    expectedPermissions &= ~S_IRWXO;
+#endif
 
     return isExactMatch ? (permissionBits == expectedPermissions)
                         : BitOps_AreAllBitsSet(permissionBits, expectedPermissions);
@@ -51,7 +69,7 @@ static _Bool PermissionUtils_VerifyFilemodeBits(const char* path, mode_t expecte
  * @param expectedPermissions The expected permissions of the file object.
  * @returns true if file's permission bits are equal.
  */
-_Bool PermissionUtils_VerifyFilemodeExact(const char* path, mode_t expectedPermissions)
+bool PermissionUtils_VerifyFilemodeExact(const char* path, mode_t expectedPermissions)
 {
     return PermissionUtils_VerifyFilemodeBits(path, expectedPermissions, true /* isExactMatch */);
 }
@@ -62,7 +80,7 @@ _Bool PermissionUtils_VerifyFilemodeExact(const char* path, mode_t expectedPermi
  * @param bitmask The permissions bit mask.
  * @returns true if file's permissions bits have high bits for all corresponding high bits in the mask.
  */
-_Bool PermissionUtils_VerifyFilemodeBitmask(const char* path, mode_t bitmask)
+bool PermissionUtils_VerifyFilemodeBitmask(const char* path, mode_t bitmask)
 {
     return PermissionUtils_VerifyFilemodeBits(path, bitmask, false /* isExactMatch */);
 }
@@ -72,9 +90,9 @@ _Bool PermissionUtils_VerifyFilemodeBitmask(const char* path, mode_t bitmask)
  * @param user The case-sensitive user.
  * @returns true if user exists.
  */
-_Bool PermissionUtils_UserExists(const char* user)
+bool PermissionUtils_UserExists(const char* user)
 {
-    return getpwnam(user) != NULL;
+    return ADUCPAL_getpwnam(user) != NULL;
 }
 
 /**
@@ -82,9 +100,9 @@ _Bool PermissionUtils_UserExists(const char* user)
  * @param group The case-sensitive group.
  * @returns true if group exists.
  */
-_Bool PermissionUtils_GroupExists(const char* group)
+bool PermissionUtils_GroupExists(const char* group)
 {
-    return getgrnam(group) != NULL;
+    return ADUCPAL_getgrnam(group) != NULL;
 }
 
 /**
@@ -93,11 +111,11 @@ _Bool PermissionUtils_GroupExists(const char* group)
  * @param group The case-sensitive group.
  * @returns true if user was found to be a member of group.
  */
-_Bool PermissionUtils_UserInSupplementaryGroup(const char* user, const char* group)
+bool PermissionUtils_UserInSupplementaryGroup(const char* user, const char* group)
 {
-    _Bool result = false;
+    bool result = false;
 
-    struct group* groupEntry = getgrnam(group);
+    struct group* groupEntry = ADUCPAL_getgrnam(group);
     if (groupEntry != NULL && groupEntry->gr_mem != NULL)
     {
         for (int i = 0; groupEntry->gr_mem[i] != NULL; ++i)
@@ -120,9 +138,9 @@ _Bool PermissionUtils_UserInSupplementaryGroup(const char* user, const char* gro
  * @param group The expected group on the file, or NULL to opt out of checking group.
  * @returns true if it is owned by user.
  */
-_Bool PermissionUtils_CheckOwnership(const char* path, const char* user, const char* group)
+bool PermissionUtils_CheckOwnership(const char* path, const char* user, const char* group)
 {
-    _Bool result = true;
+    bool result = true;
 
     struct stat st;
     if (stat(path, &st) != 0)
@@ -132,7 +150,7 @@ _Bool PermissionUtils_CheckOwnership(const char* path, const char* user, const c
 
     if (user != NULL)
     {
-        const struct passwd* pwd = getpwnam(user);
+        const struct passwd* pwd = ADUCPAL_getpwnam(user);
         if (pwd == NULL)
         {
             return false;
@@ -143,7 +161,7 @@ _Bool PermissionUtils_CheckOwnership(const char* path, const char* user, const c
 
     if (group != NULL)
     {
-        const struct group* grp = getgrnam(group);
+        const struct group* grp = ADUCPAL_getgrnam(group);
         if (grp == NULL)
         {
             return false;
@@ -160,7 +178,7 @@ _Bool PermissionUtils_CheckOwnership(const char* path, const char* user, const c
  * @param path The path to the file object.
  * @returns true if the given uid is the owning uid of the file.
  */
-_Bool PermissionUtils_CheckOwnerUid(const char* path, uid_t uid)
+bool PermissionUtils_CheckOwnerUid(const char* path, uid_t uid)
 {
     struct stat st;
     if (stat(path, &st) != 0)
@@ -176,7 +194,7 @@ _Bool PermissionUtils_CheckOwnerUid(const char* path, uid_t uid)
  * @param path The path to the file object.
  * @returns true if the given gid is the owning gid of the file.
  */
-_Bool PermissionUtils_CheckOwnerGid(const char* path, gid_t gid)
+bool PermissionUtils_CheckOwnerGid(const char* path, gid_t gid)
 {
     struct stat st;
     if (stat(path, &st) != 0)
@@ -185,4 +203,30 @@ _Bool PermissionUtils_CheckOwnerGid(const char* path, gid_t gid)
     }
 
     return st.st_gid == gid;
+}
+
+/**
+ * @brief Set effective user of the calling process.
+ *
+ * @param name The username
+ * @return bool Returns true if user @p name exist and the effective user successfully set.
+ *  If failed, additional error is stored in errno.
+ */
+bool PermissionUtils_SetProcessEffectiveUID(const char* name)
+{
+    struct passwd* p = ADUCPAL_getpwnam(name);
+    return (p != NULL && ADUCPAL_seteuid(p->pw_uid) == 0);
+}
+
+/**
+ * @brief Set effective group of the calling process.
+ *
+ * @param name The username
+ * @return bool Returns true if group @p name exist and the effective group successfully set.
+ * If failed, additional error is stored in errno.
+ */
+bool PermissionUtils_SetProcessEffectiveGID(const char* name)
+{
+    struct group* grp = ADUCPAL_getgrnam(name);
+    return (grp != NULL && ADUCPAL_setegid(grp->gr_gid) == 0);
 }

@@ -6,11 +6,12 @@
 # Ensure that getopt starts from first option if ". <script.sh>" was used.
 OPTIND=1
 
+ret='exit'
 # Ensure we dont end the user's terminal session if invoked from source (".").
 if [[ $0 != "${BASH_SOURCE[0]}" ]]; then
-    ret=return
+    ret='return'
 else
-    ret=exit
+    ret='exit'
 fi
 
 warn() { echo -e "\033[1;33mWarning:\033[0m $*" >&2; }
@@ -21,24 +22,29 @@ header() { echo -e "\e[4m\e[1m\e[1;32m$*\e[0m"; }
 
 bullet() { echo -e "\e[1;34m*\e[0m $*"; }
 
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" > /dev/null 2>&1 && pwd)"
 root_dir=$script_dir/..
 
 build_clean=false
 build_documentation=false
 build_packages=false
 platform_layer="linux"
-content_handlers="microsoft/swupdate,microsoft/apt,microsoft/simulator"
+trace_target_deps=false
+step_handlers="microsoft/apt,microsoft/script,microsoft/simulator,microsoft/swupdate_v2"
+use_test_root_keys=false
+srvc_e2e_agent_build=false
 build_type=Debug
 adu_log_dir=""
 default_log_dir=/var/log/adu
 output_directory=$root_dir/out
 build_unittests=false
+enable_e2e_testing=false
 declare -a static_analysis_tools=()
 log_lib="zlog"
 install_prefix=/usr/local
 install_adu=false
-cmake_dir_path=/tmp/cmake-3.10.2
+work_folder=/tmp
+cmake_dir_path="${work_folder}/deviceupdate-cmake"
 
 print_help() {
     echo "Usage: build.sh [options...]"
@@ -47,6 +53,7 @@ print_help() {
     echo "                                      Options: Release Debug RelWithDebInfo MinSizeRel"
     echo "-d, --build-docs                      Builds the documentation."
     echo "-u, --build-unit-tests                Builds unit tests."
+    echo "--enable-e2e-testing                  Enables settings for the E2E test pipelines."
     echo "--build-packages                      Builds and packages the client in various package formats e.g debian."
     echo "-o, --out-dir <out_dir>               Sets the build output directory. Default is out."
     echo "-s, --static-analysis <tools...>      Runs static analysis as part of the build."
@@ -55,6 +62,8 @@ print_help() {
     echo ""
     echo "-p, --platform-layer <layer>          Specify the platform layer to build/use. Default is linux."
     echo "                                      Option: linux"
+    echo ""
+    echo "--trace-target-deps                   Traces dependencies of CMake targets debug info."
     echo ""
     echo "--log-lib <log_lib>                   Specify the logging library to build/use. Default is zlog."
     echo "                                      Options: zlog xlog"
@@ -65,11 +74,22 @@ print_help() {
     echo "--install-prefix <prefix>             Install prefix to pass to CMake."
     echo ""
     echo "--install                             Install the following ADU components."
-    echo "                                          From source: adu-agent.service & adu-swupdate.sh."
+    echo "                                          From source: deviceupdate-agent.service & adu-swupdate.sh."
     echo "                                          From build output directory: AducIotAgent & adu-shell."
     echo ""
-    echo "--cmake-path                          Specify the cmake path that we want to use to build ADU."
-    echo "                                      Default will be the path same as install-deps.sh cmake_dir_path"
+    echo "--content-handlers <handlers>         [Deprecated] use '--step-handlers' option instead."
+    echo "--step-handlers <handlers>            Specify a comma-delimited list of the step handlers to build."
+    echo "                                          Default is \"${step_handlers}\"."
+    echo ""
+    echo "--cmake-path                          Override the cmake path such that CMake binary is at <cmake-path>/bin/cmake"
+    echo ""
+    echo "--openssl-path                        Override the openssl path"
+    echo ""
+    echo "--major-version                       Major version of ADU"
+    echo ""
+    echo "--minor-version                       Minor version of ADU"
+    echo ""
+    echo "--patch-version                       Patch version of ADU"
     echo ""
     echo "-h, --help                            Show this help message."
 }
@@ -80,7 +100,7 @@ copyfile_exit_if_failed() {
     ret_val=$?
     if [[ $ret_val != 0 ]]; then
         error "failed to copy $1 to $2 (exit code:$ret_val)"
-        exit $ret_val
+        $ret $ret_val
     fi
 }
 
@@ -95,7 +115,7 @@ install_adu_components() {
     groupadd --system adu
     useradd --system -p '' -g adu --no-create-home --shell /sbin/false adu
 
-    bullet "Add current user ('$USER') to 'adu' group, to allow launching adu-agent (for testing purposes only)"
+    bullet "Add current user ('$USER') to 'adu' group, to allow launching deviceupdate-agent (for testing purposes only)"
     usermod -a -G adu "$USER"
     bullet "Current user info:"
     id
@@ -126,17 +146,17 @@ install_adu_components() {
     chmod u=rwxs,g=rx,o= "$adu_lib_dir/adu-shell"
     chmod u=rwx,g=rx,o=rx "$adu_lib_dir/adu-swupdate.sh"
 
-    # Only install adu-agent service on system that support systemd.
+    # Only install deviceupdate-agent service on system that support systemd.
     systemd_system_dir=/usr/lib/systemd/system/
     if [ -d "$systemd_system_dir" ]; then
-        bullet "Install adu-agent systemd daemon..."
-        copyfile_exit_if_failed "$root_dir/daemon/adu-agent.service" "$systemd_system_dir"
+        bullet "Install deviceupdate-agent systemd daemon..."
+        copyfile_exit_if_failed "$root_dir/daemon/deviceupdate-agent.service" "$systemd_system_dir"
 
         systemctl daemon-reload
-        systemctl enable adu-agent
-        systemctl restart adu-agent
+        systemctl enable deviceupdate-agent
+        systemctl restart deviceupdate-agent
     else
-        warn "Directory $systemd_system_dir does not exist. Skip adu-agent.service installation."
+        warn "Directory $systemd_system_dir does not exist. Skip deviceupdate-agent.service installation."
     fi
 
     echo "ADU components installation completed."
@@ -146,15 +166,13 @@ install_adu_components() {
 OS=""
 VER=""
 determine_distro() {
-    # shellcheck disable=SC1091
-
     # Checking distro name and version
     if [ -r /etc/os-release ]; then
         # freedesktop.org and systemd
         OS=$(grep "^ID\s*=\s*" /etc/os-release | sed -e "s/^ID\s*=\s*//")
         VER=$(grep "^VERSION_ID\s*=\s*" /etc/os-release | sed -e "s/^VERSION_ID\s*=\s*//")
-        VER=$(sed -e 's/^"//' -e 's/"$//' <<<"$VER")
-    elif type lsb_release >/dev/null 2>&1; then
+        VER=$(sed -e 's/^"//' -e 's/"$//' <<< "$VER")
+    elif type lsb_release > /dev/null 2>&1; then
         # linuxbase.org
         OS=$(lsb_release -si)
         VER=$(lsb_release -sr)
@@ -181,6 +199,22 @@ while [[ $1 != "" ]]; do
     -c | --clean)
         build_clean=true
         ;;
+    --step-handlers)
+        shift
+        if [[ -z $1 || $1 == -* ]]; then
+            error "--step-handlers parameter is mandatory."
+            $ret 1
+        fi
+        step_handlers=$1
+        ;;
+    --content-handlers)
+        shift
+        if [[ -z $1 || $1 == -* ]]; then
+            error "--content-handlers parameter is mandatory."
+            $ret 1
+        fi
+        step_handlers=$1
+        ;;
     -t | --type)
         shift
         if [[ -z $1 || $1 == -* ]]; then
@@ -194,6 +228,9 @@ while [[ $1 != "" ]]; do
         ;;
     -u | --build-unit-tests)
         build_unittests=true
+        ;;
+    --enable-e2e-testing)
+        enable_e2e_testing=true
         ;;
     --build-packages)
         build_packages=true
@@ -217,7 +254,7 @@ while [[ $1 != "" ]]; do
             declare -a static_analysis_tools=(clang-tidy cppcheck cpplint iwyu lwyu)
         else
             IFS=','
-            read -ra static_analysis_tools <<<"$1"
+            read -ra static_analysis_tools <<< "$1"
             IFS=' '
         fi
         ;;
@@ -228,7 +265,15 @@ while [[ $1 != "" ]]; do
             $ret 1
         fi
         platform_layer=$1
-
+        ;;
+    --trace-target-deps)
+        trace_target_deps=true
+        ;;
+    --use-test-root-keys)
+        use_test_root_keys=true
+        ;;
+    --build-service-e2e-agent)
+        srvc_e2e_agent_build=true
         ;;
     --log-lib)
         shift
@@ -263,7 +308,23 @@ while [[ $1 != "" ]]; do
         ;;
     --cmake-path)
         shift
+        if [[ -z $1 || $1 == -* ]]; then
+            error "--cmake-path parameter is mandatory."
+            $ret 1
+        fi
         cmake_dir_path=$1
+        ;;
+    --major-version)
+        shift
+        major_version=$1
+        ;;
+    --minor-version)
+        shift
+        minor_version=$1
+        ;;
+    --patch-version)
+        shift
+        patch_version=$1
         ;;
     -h | --help)
         print_help
@@ -291,15 +352,22 @@ fi
 
 # Set default log dir if not specified.
 if [[ $adu_log_dir == "" ]]; then
-    if [[ $platform_layer == "simulator" ]]; then
-        adu_log_dir=/tmp/aduc-logs
-    else
-        adu_log_dir=$default_log_dir
-    fi
+    adu_log_dir=$default_log_dir
 fi
 
 runtime_dir=${output_directory}/bin
 library_dir=${output_directory}/lib
+cmake_bin="${cmake_dir_path}/bin/cmake"
+shellcheck_bin="${work_folder}/deviceupdate-shellcheck"
+
+if [[ $srvc_e2e_agent_build == "true" ]]; then
+    warn "BUILDING SERVICE E2E AGENT NEVER USE FOR PRODUCTION"
+    echo "Additionally implies: "
+    echo " --enable-e2e-testing , --use-test-root-keys, --build-packages"
+    use_test_root_keys=true
+    enable_e2e_testing=true
+    build_packages=true
+fi
 
 # Output banner
 echo ''
@@ -307,35 +375,54 @@ header "Building ADU Agent"
 bullet "Clean build: $build_clean"
 bullet "Documentation: $build_documentation"
 bullet "Platform layer: $platform_layer"
-bullet "Content handlers: $content_handlers"
+bullet "Trace target deps: $trace_target_deps"
+bullet "Step handlers: $step_handlers"
 bullet "Build type: $build_type"
 bullet "Log directory: $adu_log_dir"
 bullet "Logging library: $log_lib"
 bullet "Output directory: $output_directory"
 bullet "Build unit tests: $build_unittests"
+bullet "Enable E2E testing: $enable_e2e_testing"
 bullet "Build packages: $build_packages"
+bullet "CMake: $cmake_bin"
+bullet "CMake version: $(${cmake_bin} --version | grep version | awk '{ print $3 }')"
+bullet "shellcheck: $shellcheck_bin"
+bullet "shellcheck version: $("$shellcheck_bin" --version | grep 'version:' | awk '{ print $2 }')"
 if [[ ${#static_analysis_tools[@]} -eq 0 ]]; then
     bullet "Static analysis: (none)"
 else
     bullet "Static analysis: " "${static_analysis_tools[@]}"
 fi
+bullet "Include Test Root Keys: $use_test_root_keys"
 echo ''
 
-# Store options for CMAKE in an array
 CMAKE_OPTIONS=(
     "-DADUC_BUILD_DOCUMENTATION:BOOL=$build_documentation"
     "-DADUC_BUILD_UNIT_TESTS:BOOL=$build_unittests"
     "-DADUC_BUILD_PACKAGES:BOOL=$build_packages"
-    "-DADUC_CONTENT_HANDLERS:STRING=$content_handlers"
+    "-DADUC_STEP_HANDLERS:STRING=$step_handlers"
+    "-DADUC_ENABLE_E2E_TESTING=$enable_e2e_testing"
     "-DADUC_LOG_FOLDER:STRING=$adu_log_dir"
     "-DADUC_LOGGING_LIBRARY:STRING=$log_lib"
     "-DADUC_PLATFORM_LAYER:STRING=$platform_layer"
+    "-DADUC_TRACE_TARGET_DEPS=$trace_target_deps"
+    "-DADUC_USE_TEST_ROOT_KEYS=$use_test_root_keys"
     "-DCMAKE_BUILD_TYPE:STRING=$build_type"
     "-DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=ON"
     "-DCMAKE_LIBRARY_OUTPUT_DIRECTORY:STRING=$library_dir"
     "-DCMAKE_RUNTIME_OUTPUT_DIRECTORY:STRING=$runtime_dir"
     "-DCMAKE_INSTALL_PREFIX=$install_prefix"
 )
+
+if [[ $major_version != "" ]]; then
+    CMAKE_OPTIONS+=("-DADUC_VERSION_MAJOR=$major_version")
+fi
+if [[ $minor_version != "" ]]; then
+    CMAKE_OPTIONS+=("-DADUC_VERSION_MINOR=$minor_version")
+fi
+if [[ $patch_version != "" ]]; then
+    CMAKE_OPTIONS+=("-DADUC_VERSION_PATCH=$patch_version")
+fi
 
 for i in "${static_analysis_tools[@]}"; do
     case $i in
@@ -411,26 +498,31 @@ if [[ $build_clean == "true" ]]; then
 fi
 
 mkdir -p "$output_directory"
-pushd "$output_directory" >/dev/null
+pushd "$output_directory" > /dev/null || $ret
 
 # Generate build using cmake with options
-if [[ $OS != "ubuntu" || $VER != "18.04" ]]; then
-        "$cmake_dir_path"/bin/cmake -G Ninja "${CMAKE_OPTIONS[@]}" "$root_dir"
+if [ ! -f "$cmake_bin" ]; then
+    error "No '${cmake_bin}' file."
+    ret_val=1
 else
-    cmake -G Ninja "${CMAKE_OPTIONS[@]}" "$root_dir"
+    "$cmake_bin" -G Ninja "${CMAKE_OPTIONS[@]}" "$root_dir"
+    ret_val=$?
 fi
 
-# Do the actual building with ninja
-# Save the return code of ninja so we can $ret with that return code.
-ninja
-ret_val=$?
+if [ $ret_val -ne 0 ]; then
+    error "CMake failed to generate Ninja build with exit code: $ret_val"
+else
+    # Do the actual building with ninja
+    ninja
+    ret_val=$?
+fi
 
 if [[ $ret_val == 0 && $build_packages == "true" ]]; then
     cpack
     ret_val=$?
 fi
 
-popd >/dev/null
+popd > /dev/null || $ret
 
 if [[ $ret_val == 0 && $install_adu == "true" ]]; then
     install_adu_components

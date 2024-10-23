@@ -12,9 +12,17 @@
 #include "aduc/agent_workflow.h"
 #include "aduc/c_utils.h"
 #include "aduc/client_handle_helper.h"
+#include "aduc/config_utils.h"
+#include "aduc/d2c_messaging.h"
 #include "aduc/hash_utils.h"
 #include "aduc/logging.h"
+#include "aduc/reporting_utils.h"
+#include "aduc/rootkey_workflow.h"
+#include "aduc/rootkeypackage_do_download.h"
+#include "aduc/rootkeypackage_types.h"
+#include "aduc/rootkeypackage_utils.h"
 #include "aduc/string_c_utils.h"
+#include "aduc/types/adu_core.h"
 #include "aduc/types/update_content.h"
 #include "aduc/workflow_data_utils.h"
 #include "aduc/workflow_utils.h"
@@ -44,17 +52,16 @@ static const char g_aduPnPComponentServicePropertyName[] = "service";
  */
 ADUC_ClientHandle g_iotHubClientHandleForADUComponent;
 
-void ClientReportedStateCallback(int statusCode, void* context)
+/**
+ * @brief This function is called when the message is no longer being process.
+ *
+ * @param context The ADUC_D2C_Message object
+ * @param status The message status.
+ */
+static void OnUpdateResultD2CMessageCompleted(void* context, ADUC_D2C_Message_Status status)
 {
     UNREFERENCED_PARAMETER(context);
-
-    if (statusCode < 200 || statusCode >= 300)
-    {
-        Log_Error(
-            "Failed to report ADU agent's state, error: %d, %s",
-            statusCode,
-            MU_ENUM_TO_STRING(IOTHUB_CLIENT_RESULT, statusCode));
-    }
+    Log_Debug("Send message completed (status:%d)", status);
 }
 
 /**
@@ -63,11 +70,11 @@ void ClientReportedStateCallback(int statusCode, void* context)
  * @param[out] workflowData Workflow metadata.
  * @param argc Count of arguments in @p argv
  * @param argv Command line parameters.
- * @return _Bool True on success.
+ * @return bool True on success.
  */
-_Bool ADUC_WorkflowData_Init(ADUC_WorkflowData* workflowData, int argc, char** argv)
+bool ADUC_WorkflowData_Init(ADUC_WorkflowData* workflowData, int argc, char** argv)
 {
-    _Bool succeeded = false;
+    bool succeeded = false;
 
     memset(workflowData, 0, sizeof(*workflowData));
 
@@ -86,7 +93,6 @@ _Bool ADUC_WorkflowData_Init(ADUC_WorkflowData* workflowData, int argc, char** a
     workflowData->ReportStateAndResultAsyncCallback = AzureDeviceUpdateCoreInterface_ReportStateAndResultAsync;
 
     workflowData->LastCompletedWorkflowId = NULL;
-    workflowData->LastGoalStateJson = NULL;
 
     workflow_set_cancellation_type(workflowData->WorkflowHandle, ADUC_WorkflowCancellationType_None);
 
@@ -114,42 +120,23 @@ void ADUC_WorkflowData_Uninit(ADUC_WorkflowData* workflowData)
     }
 
     workflow_free_string(workflowData->LastCompletedWorkflowId);
-    free(workflowData->LastGoalStateJson);
     memset(workflowData, 0, sizeof(*workflowData));
-}
-
-/**
- * @brief Gets the client handle send report function.
- *
- * @param workflowData The workflow data.
- * @return ClientHandleSnedReportFunc The function for sending the client report.
- */
-static ClientHandleSendReportFunc
-ADUC_WorkflowData_GetClientHandleSendReportFunc(const ADUC_WorkflowData* workflowData)
-{
-    ClientHandleSendReportFunc fn = (ClientHandleSendReportFunc)ClientHandle_SendReportedState;
-
-#ifdef ADUC_BUILD_UNIT_TESTS
-    ADUC_TestOverride_Hooks* hooks = workflowData->TestOverrides;
-    if (hooks && hooks->ClientHandle_SendReportedStateFunc_TestOverride)
-    {
-        fn = (ClientHandleSendReportFunc)(hooks->ClientHandle_SendReportedStateFunc_TestOverride);
-    }
-#endif
-
-    return fn;
 }
 
 /**
  * @brief Reports the client json via PnP so it ends up in the reported section of the twin.
  *
+ * @param messageType The message type.
  * @param json_value The json value to be reported.
  * @param workflowData The workflow data.
- * @return _Bool true if call succeeded.
+ * @return bool true if call succeeded.
  */
-static _Bool ReportClientJsonProperty(const char* json_value, ADUC_WorkflowData* workflowData)
+static bool
+ReportClientJsonProperty(ADUC_D2C_Message_Type messageType, const char* json_value, ADUC_WorkflowData* workflowData)
 {
-    _Bool success = false;
+    UNREFERENCED_PARAMETER(workflowData);
+
+    bool success = false;
 
     if (g_iotHubClientHandleForADUComponent == NULL)
     {
@@ -157,7 +144,6 @@ static _Bool ReportClientJsonProperty(const char* json_value, ADUC_WorkflowData*
         return false;
     }
 
-    IOTHUB_CLIENT_RESULT iothubClientResult;
     STRING_HANDLE jsonToSend =
         PnP_CreateReportedProperty(g_aduPnPComponentName, g_aduPnPComponentAgentPropertyName, json_value);
 
@@ -167,28 +153,16 @@ static _Bool ReportClientJsonProperty(const char* json_value, ADUC_WorkflowData*
         goto done;
     }
 
-    const char* jsonToSendStr = STRING_c_str(jsonToSend);
-    size_t jsonToSendStrLen = strlen(jsonToSendStr);
-
-    Log_Debug("Reporting agent state:\n%s", jsonToSendStr);
-
-    ClientHandleSendReportFunc clientHandle_SendReportedState_Func =
-        ADUC_WorkflowData_GetClientHandleSendReportFunc(workflowData);
-
-    iothubClientResult = (IOTHUB_CLIENT_RESULT)clientHandle_SendReportedState_Func(
-        g_iotHubClientHandleForADUComponent,
-        (const unsigned char*)jsonToSendStr,
-        jsonToSendStrLen,
-        ClientReportedStateCallback,
-        NULL);
-
-    if (iothubClientResult != IOTHUB_CLIENT_OK)
+    if (!ADUC_D2C_Message_SendAsync(
+            messageType,
+            &g_iotHubClientHandleForADUComponent,
+            STRING_c_str(jsonToSend),
+            NULL /* responseCallback */,
+            OnUpdateResultD2CMessageCompleted,
+            NULL /* statusChangedCallback */,
+            NULL /* userData */))
     {
-        Log_Error(
-            "Unable to report state, %s, error: %d, %s",
-            json_value,
-            iothubClientResult,
-            MU_ENUM_TO_STRING(IOTHUB_CLIENT_RESULT, iothubClientResult));
+        Log_Error("Unable to send update result.");
         goto done;
     }
 
@@ -207,7 +181,7 @@ done:
  * @param workflowData the workflow data.
  * @returns true when the report is sent and false when reporting fails.
  */
-_Bool ReportStartupMsg(ADUC_WorkflowData* workflowData)
+bool ReportStartupMsg(ADUC_WorkflowData* workflowData)
 {
     if (g_iotHubClientHandleForADUComponent == NULL)
     {
@@ -215,11 +189,9 @@ _Bool ReportStartupMsg(ADUC_WorkflowData* workflowData)
         return false;
     }
 
-    _Bool success = false;
-
+    bool success = false;
+    const ADUC_ConfigInfo* config = NULL;
     char* jsonString = NULL;
-    char* manufacturer = NULL;
-    char* model = NULL;
 
     JSON_Value* startupMsgValue = json_value_init_object();
 
@@ -235,7 +207,16 @@ _Bool ReportStartupMsg(ADUC_WorkflowData* workflowData)
         goto done;
     }
 
-    if (!StartupMsg_AddDeviceProperties(startupMsgObj))
+    config = ADUC_ConfigInfo_GetInstance();
+
+    if (config == NULL)
+    {
+        goto done;
+    }
+
+    const ADUC_AgentInfo* agent = ADUC_ConfigInfo_GetAgent(config, 0);
+
+    if (!StartupMsg_AddDeviceProperties(startupMsgObj, agent))
     {
         Log_Error("Could not add Device Properties to the startup message");
         goto done;
@@ -255,15 +236,13 @@ _Bool ReportStartupMsg(ADUC_WorkflowData* workflowData)
         goto done;
     }
 
-    ReportClientJsonProperty(jsonString, workflowData);
+    ReportClientJsonProperty(ADUC_D2C_Message_Type_Device_Properties, jsonString, workflowData);
 
     success = true;
 done:
-    free(model);
-    free(manufacturer);
     json_value_free(startupMsgValue);
     json_free_serialized_string(jsonString);
-
+    ADUC_ConfigInfo_ReleaseInstance(config);
     return success;
 }
 
@@ -271,9 +250,9 @@ done:
 // AzureDeviceUpdateCoreInterface methods
 //
 
-_Bool AzureDeviceUpdateCoreInterface_Create(void** context, int argc, char** argv)
+bool AzureDeviceUpdateCoreInterface_Create(void** context, int argc, char** argv)
 {
-    _Bool succeeded = false;
+    bool succeeded = false;
 
     ADUC_WorkflowData* workflowData = calloc(1, sizeof(ADUC_WorkflowData));
     if (workflowData == NULL)
@@ -340,11 +319,96 @@ void AzureDeviceUpdateCoreInterface_Destroy(void** componentContext)
     *componentContext = NULL;
 }
 
-void OrchestratorUpdateCallback(
-    ADUC_ClientHandle clientHandle, JSON_Value* propertyValue, int propertyVersion, void* context)
+/**
+ * @brief Update twin to report state transition before workflow processing has started.
+ *
+ * @param propertyValue The json value to use for reporting.
+ * @param deploymentState The final deployment state to report.
+ * @param workflowData The workflow data to receive the last reported state upon reporting success.
+ * @param result The result to be reported.
+ * @return true on reporting success.
+ */
+static bool ReportPreDeploymentProcessingState(
+    JSON_Value* propertyValue, ADUCITF_State deploymentState, ADUC_WorkflowData* workflowData, ADUC_Result result)
 {
+    JSON_Value* propertyValueCopy = NULL;
+    bool reportingSuccess = false;
+
+    // Temp workflowData and workflow handle for reporting
+    ADUC_WorkflowData tmpWorkflowData;
+    memset(&tmpWorkflowData, 0, sizeof(tmpWorkflowData));
+
+    if (!ADUC_WorkflowData_InitWorkflowHandle(&tmpWorkflowData))
+    {
+        goto done;
+    }
+
+    // Synthesize workflowData current action and set a copy of the
+    // propertyValue to workflow UpdateActionObject, both of which are
+    // needed to generate the reporting json.
+    tmpWorkflowData.CurrentAction = ADUCITF_UpdateAction_ProcessDeployment;
+    propertyValueCopy = json_value_deep_copy(propertyValue);
+    if (propertyValueCopy == NULL)
+    {
+        goto done;
+    }
+
+    if (!workflow_set_update_action_object(tmpWorkflowData.WorkflowHandle, json_object(propertyValueCopy)))
+    {
+        goto done;
+    }
+
+    reportingSuccess = AzureDeviceUpdateCoreInterface_ReportStateAndResultAsync(
+        (ADUC_WorkflowDataToken)&tmpWorkflowData, deploymentState, &result, NULL /* installedUpdateId */);
+    if (!reportingSuccess)
+    {
+        goto done;
+    }
+
+    // Set the last deployment state on the actual workflow data for correct handling of update action.
+    ADUC_WorkflowData_SetLastReportedState(deploymentState, workflowData);
+
+    reportingSuccess = true;
+done:
+
+    if (tmpWorkflowData.WorkflowHandle != NULL)
+    {
+        // propertyValueCopy will get freed by workflow_free
+        workflow_free(tmpWorkflowData.WorkflowHandle);
+    }
+
+    return reportingSuccess;
+}
+
+/**
+ * @brief Callback for the orchestrator that allows the new patches coming down from the cloud to be organized
+ * @param clientHandle the client handle being used for the connection
+ * @param propertyValue the value of the property being routed
+ * @param propertyVersion the version of the property being routed
+ * @param sourceContext the context of the origination point for the callback
+ * @param context context for re-entering upon completion of the function
+ */
+void OrchestratorUpdateCallback(
+    ADUC_ClientHandle clientHandle,
+    JSON_Value* propertyValue,
+    int propertyVersion,
+    ADUC_PnPComponentClient_PropertyUpdate_Context* sourceContext,
+    void* context)
+{
+    UNREFERENCED_PARAMETER(clientHandle);
+
+    ADUC_Result tmpResult = { .ResultCode = ADUC_GeneralResult_Failure, .ExtendedResultCode = 0 };
     ADUC_WorkflowData* workflowData = (ADUC_WorkflowData*)context;
+
     STRING_HANDLE jsonToSend = NULL;
+    char* ackString = NULL;
+    JSON_Object* signatureObj = NULL;
+
+    ADUCITF_UpdateAction updateAction = ADUCITF_UpdateAction_Undefined;
+    char* workflowId = NULL;
+    char* rootKeyPkgUrl = NULL;
+    STRING_HANDLE rootKeyPackageFilePath = NULL;
+    char* workFolder = NULL;
 
     // Reads out the json string so we can Log Out what we've got.
     // The value will be parsed and handled in ADUC_Workflow_HandlePropertyUpdate.
@@ -358,8 +422,7 @@ void OrchestratorUpdateCallback(
     }
 
     // To reduce TWIN size, remove UpdateManifestSignature and fileUrls before ACK.
-    char* ackString = NULL;
-    JSON_Object* signatureObj = json_value_get_object(propertyValue);
+    signatureObj = json_value_get_object(propertyValue);
     if (signatureObj != NULL)
     {
         json_object_set_null(signatureObj, "updateManifestSignature");
@@ -369,7 +432,49 @@ void OrchestratorUpdateCallback(
 
     Log_Debug("Update Action info string (%s), property version (%d)", ackString, propertyVersion);
 
-    ADUC_Workflow_HandlePropertyUpdate(workflowData, (const unsigned char*)jsonString, false /* forceDeferral */);
+    tmpResult = workflow_parse_peek_unprotected_workflow_properties(
+        json_object(propertyValue), &updateAction, &rootKeyPkgUrl, &workflowId);
+    if (IsAducResultCodeFailure(tmpResult.ResultCode))
+    {
+        Log_Error("Parse failed for unprotected properties, erc: 0x%08x", tmpResult.ExtendedResultCode);
+        // Note, cannot report failure here since workflowId from unprotected properties is needed for that.
+        goto done;
+    }
+
+    if (updateAction == ADUCITF_UpdateAction_ProcessDeployment && !IsNullOrEmpty(workflowId))
+    {
+        Log_Debug("Processing deployment %s ...", workflowId);
+
+        ADUC_Result inProgressResult = { .ResultCode = ADUC_GeneralResult_Success, .ExtendedResultCode = 0 };
+        if (!ReportPreDeploymentProcessingState(
+                propertyValue, ADUCITF_State_DeploymentInProgress, workflowData, inProgressResult))
+        {
+            Log_Warn("Reporting InProgress failed. Continuing processing deployment %s", workflowId);
+        }
+
+        // Ensure update to latest rootkey pkg, which is required for validating the update metadata.
+        workFolder = workflow_get_root_sandbox_dir(workflowData->WorkflowHandle);
+        if (workFolder == NULL)
+        {
+            Log_Error("workflow_get_root_sandbox_dir failed");
+            goto done;
+        }
+
+        tmpResult = RootKeyWorkflow_UpdateRootKeys(workflowId, workFolder, rootKeyPkgUrl);
+        if (IsAducResultCodeFailure(tmpResult.ResultCode))
+        {
+            Log_Error("Update Rootkey failed, 0x%08x. Deployment cannot proceed.", tmpResult.ExtendedResultCode);
+
+            if (!ReportPreDeploymentProcessingState(propertyValue, ADUCITF_State_Failed, workflowData, tmpResult))
+            {
+                Log_Warn("FAIL: report rootkey update 'Failed' State.");
+            }
+
+            goto done;
+        }
+    }
+
+    ADUC_Workflow_HandlePropertyUpdate(workflowData, (const unsigned char*)jsonString, sourceContext->forceUpdate);
     free(jsonString);
     jsonString = ackString;
 
@@ -388,23 +493,25 @@ void OrchestratorUpdateCallback(
         goto done;
     }
 
-    const char* jsonToSendStr = STRING_c_str(jsonToSend);
-    size_t jsonToSendStrLen = strlen(jsonToSendStr);
-    IOTHUB_CLIENT_RESULT iothubClientResult = ClientHandle_SendReportedState(
-        clientHandle, (const unsigned char*)jsonToSendStr, jsonToSendStrLen, NULL, NULL);
-
-    if (iothubClientResult != IOTHUB_CLIENT_OK)
+    if (!ADUC_D2C_Message_SendAsync(
+            ADUC_D2C_Message_Type_Device_Update_ACK,
+            &g_iotHubClientHandleForADUComponent,
+            STRING_c_str(jsonToSend),
+            NULL /* responseCallback */,
+            OnUpdateResultD2CMessageCompleted,
+            NULL /* statusChangedCallback */,
+            NULL /* userData */))
     {
-        Log_Error(
-            "Unable to send acknowledgement of property to IoT Hub for component=%s, error=%d",
-            g_aduPnPComponentName,
-            iothubClientResult);
+        Log_Error("Unable to send update result.");
         goto done;
     }
 
 done:
+    STRING_delete(rootKeyPackageFilePath);
+    workflow_free_string(rootKeyPkgUrl);
+    workflow_free_string(workflowId);
+    workflow_free_string(workFolder);
     STRING_delete(jsonToSend);
-
     free(jsonString);
 
     Log_Info("OrchestratorPropertyUpdateCallback ended");
@@ -417,14 +524,20 @@ done:
  * @param propertyName The name of the property that changed.
  * @param propertyValue The new property value.
  * @param version Property version.
+ * @param sourceContext An information about the source of the property update notificaion.
  * @param context An ADUC_WorkflowData object.
  */
 void AzureDeviceUpdateCoreInterface_PropertyUpdateCallback(
-    ADUC_ClientHandle clientHandle, const char* propertyName, JSON_Value* propertyValue, int version, void* context)
+    ADUC_ClientHandle clientHandle,
+    const char* propertyName,
+    JSON_Value* propertyValue,
+    int version,
+    ADUC_PnPComponentClient_PropertyUpdate_Context* sourceContext,
+    void* context)
 {
     if (strcmp(propertyName, g_aduPnPComponentServicePropertyName) == 0)
     {
-        OrchestratorUpdateCallback(clientHandle, propertyValue, version, context);
+        OrchestratorUpdateCallback(clientHandle, propertyValue, version, sourceContext, context);
     }
     else
     {
@@ -436,7 +549,7 @@ void AzureDeviceUpdateCoreInterface_PropertyUpdateCallback(
 // Reporting
 //
 static JSON_Status _json_object_set_update_result(
-    JSON_Object* object, int32_t resultCode, int32_t extendedResultCode, const char* resultDetails)
+    JSON_Object* object, int32_t resultCode, STRING_HANDLE extendedResultCodes, const char* resultDetails)
 {
     JSON_Status status = json_object_set_number(object, ADUCITF_FIELDNAME_RESULTCODE, resultCode);
     if (status != JSONSuccess)
@@ -445,10 +558,10 @@ static JSON_Status _json_object_set_update_result(
         goto done;
     }
 
-    status = json_object_set_number(object, ADUCITF_FIELDNAME_EXTENDEDRESULTCODE, extendedResultCode);
+    status = json_object_set_string(object, ADUCITF_FIELDNAME_EXTENDEDRESULTCODES, STRING_c_str(extendedResultCodes));
     if (status != JSONSuccess)
     {
-        Log_Error("Could not set value for field: %s", ADUCITF_FIELDNAME_EXTENDEDRESULTCODE);
+        Log_Error("Could not set value for field: %s", ADUCITF_FIELDNAME_EXTENDEDRESULTCODES);
         goto done;
     }
 
@@ -482,10 +595,10 @@ done:
  * @param[in] retryTimestamp optional. The retry timestamp that's present for service-initiated retries.
  * @return true if all properties were set successfully; false, otherwise.
  */
-static _Bool set_workflow_properties(
+static bool set_workflow_properties(
     JSON_Value* workflowValue, ADUCITF_UpdateAction updateAction, const char* workflowId, const char* retryTimestamp)
 {
-    _Bool succeeded = false;
+    bool succeeded = false;
 
     JSON_Object* workflowObject = json_value_get_object(workflowValue);
     if (json_object_set_number(workflowObject, ADUCITF_FIELDNAME_ACTION, updateAction) != JSONSuccess)
@@ -516,6 +629,21 @@ done:
     return succeeded;
 }
 
+static STRING_HANDLE construct_extended_result_codes_str(ADUC_WorkflowHandle handle, ADUC_Result rootResult)
+{
+    STRING_HANDLE root_result_erc_str =
+        ADUC_ReportingUtils_CreateReportingErcHexStr(rootResult.ExtendedResultCode, true /* is_first */);
+    STRING_HANDLE extra_ercs_str = workflow_get_extra_ercs(handle);
+    if (extra_ercs_str != NULL && STRING_length(extra_ercs_str) > 0 && root_result_erc_str != NULL
+        && STRING_length(root_result_erc_str) > 0)
+    {
+        STRING_concat_with_STRING(root_result_erc_str, extra_ercs_str);
+    }
+
+    STRING_delete(extra_ercs_str);
+    return root_result_erc_str;
+}
+
 /**
  * @brief Get the Reporting Json Value object
  *
@@ -532,6 +660,13 @@ JSON_Value* GetReportingJsonValue(
     const char* installedUpdateId)
 {
     JSON_Value* resultValue = NULL;
+
+    // Declare and init here to avoid maybe-uninitialized static analysis errors
+    JSON_Value* rootValue = NULL;
+    JSON_Value* lastInstallResultValue = NULL;
+    JSON_Value* stepResultsValue = NULL;
+    JSON_Value* workflowValue = NULL;
+    STRING_HANDLE rootResultERCs = NULL;
 
     //
     // Get result from current workflow if exists.
@@ -553,9 +688,18 @@ JSON_Value* GetReportingJsonValue(
         rootResult = workflow_get_result(handle);
     }
 
-    JSON_Value* rootValue = json_value_init_object();
+    // The "extendedResultCodes" reported property is a JSON string, where the first ERC (8 hex digits) is always
+    // from the rootResult. Extra ERC can be appended for soft-failing mechanisms with fallback mechanisms
+    // e.g. download handler or update metadata rootkey management.
+    rootResultERCs = construct_extended_result_codes_str(handle, rootResult);
+    if (rootResultERCs == NULL)
+    {
+        goto done;
+    }
+
+    rootValue = json_value_init_object();
     JSON_Object* rootObject = json_value_get_object(rootValue);
-    int stepsCount = workflow_get_children_count(handle);
+    size_t stepsCount = workflow_get_children_count(handle);
 
     //
     // Prepare 'lastInstallResult', 'stepResults' data.
@@ -572,31 +716,31 @@ JSON_Value* GetReportingJsonValue(
     //
     //     "lastInstallResult" : {
     //         "resultCode" : ####,
-    //         "extendedResultCode" : ####,
+    //         "extendedResultCodes" : "########,########",
     //         "resultDetails" : "...",
     //         "stepResults" : {
     //             "step_0" : {
     //                 "resultCode" : ####,
-    //                 "extendedResultCode" : ####,
+    //                 "extendedResultCodes" : "########",
     //                 "resultDetails" : "..."
     //             },
     //             ...
     //             "step_N" : {
     //                 "resultCode" : ####,
-    //                 "extendedResultCode" : ####,
+    //                 "extendedResultCodes" : "########",
     //                 "resultDetails" : "..."
     //             }
     //         }
     //     }
     // }
 
-    JSON_Value* lastInstallResultValue = json_value_init_object();
+    lastInstallResultValue = json_value_init_object();
     JSON_Object* lastInstallResultObject = json_object(lastInstallResultValue);
 
-    JSON_Value* stepResultsValue = json_value_init_object();
+    stepResultsValue = json_value_init_object();
     JSON_Object* stepResultsObject = json_object(stepResultsValue);
 
-    JSON_Value* workflowValue = json_value_init_object();
+    workflowValue = json_value_init_object();
 
     if (lastInstallResultValue == NULL || stepResultsValue == NULL || workflowValue == NULL)
     {
@@ -627,13 +771,12 @@ JSON_Value* GetReportingJsonValue(
     //
     // Workflow
     //
-    char* workflowId = workflow_get_id(handle);
-    if (!IsNullOrEmpty(workflowId))
+    if (!IsNullOrEmpty(workflow_peek_id(handle)))
     {
-        _Bool success = set_workflow_properties(
+        bool success = set_workflow_properties(
             workflowValue,
             ADUC_WorkflowData_GetCurrentAction(workflowData),
-            workflowId,
+            workflow_peek_id(handle),
             workflow_peek_retryTimestamp(handle));
 
         if (!success)
@@ -691,10 +834,7 @@ JSON_Value* GetReportingJsonValue(
 
     // Set top-level update state and result.
     jsonStatus = _json_object_set_update_result(
-        lastInstallResultObject,
-        rootResult.ResultCode,
-        rootResult.ExtendedResultCode,
-        workflow_peek_result_details(handle));
+        lastInstallResultObject, rootResult.ResultCode, rootResultERCs, workflow_peek_result_details(handle));
 
     if (jsonStatus != JSONSuccess)
     {
@@ -705,13 +845,14 @@ JSON_Value* GetReportingJsonValue(
     if (updateState != ADUCITF_State_DownloadStarted)
     {
         stepsCount = workflow_get_children_count(handle);
-        for (int i = 0; i < stepsCount; i++)
+        for (size_t i = 0; i < stepsCount; i++)
         {
             ADUC_WorkflowHandle childHandle = workflow_get_child(handle, i);
             ADUC_Result childResult;
             JSON_Value* childResultValue = NULL;
             JSON_Object* childResultObject = NULL;
             STRING_HANDLE childUpdateId = NULL;
+            STRING_HANDLE childExtendedResultCodes = NULL;
 
             if (childHandle == NULL)
             {
@@ -746,10 +887,12 @@ JSON_Value* GetReportingJsonValue(
             }
             childResultValue = NULL; // stepResultsValue owns it now.
 
+            childExtendedResultCodes =
+                ADUC_ReportingUtils_CreateReportingErcHexStr(childResult.ExtendedResultCode, true /* is_first */);
             jsonStatus = _json_object_set_update_result(
                 childResultObject,
                 childResult.ResultCode,
-                childResult.ExtendedResultCode,
+                childExtendedResultCodes,
                 workflow_peek_result_details(childHandle));
 
             if (jsonStatus != JSONSuccess)
@@ -759,6 +902,7 @@ JSON_Value* GetReportingJsonValue(
 
         childDone:
             STRING_delete(childUpdateId);
+            STRING_delete(childExtendedResultCodes);
             childUpdateId = NULL;
             json_value_free(childResultValue);
             childResultValue = NULL;
@@ -773,6 +917,7 @@ done:
     json_value_free(lastInstallResultValue);
     json_value_free(stepResultsValue);
     json_value_free(workflowValue);
+    STRING_delete(rootResultERCs);
 
     return resultValue;
 }
@@ -786,13 +931,13 @@ done:
  * @param installedUpdateId Installed update id (if update completed successfully).
  * @return true if succeeded.
  */
-_Bool AzureDeviceUpdateCoreInterface_ReportStateAndResultAsync(
+bool AzureDeviceUpdateCoreInterface_ReportStateAndResultAsync(
     ADUC_WorkflowDataToken workflowDataToken,
     ADUCITF_State updateState,
     const ADUC_Result* result,
     const char* installedUpdateId)
 {
-    _Bool success = false;
+    bool success = false;
     ADUC_WorkflowData* workflowData = (ADUC_WorkflowData*)workflowDataToken;
 
     JSON_Value* rootValue = NULL;
@@ -830,7 +975,7 @@ _Bool AzureDeviceUpdateCoreInterface_ReportStateAndResultAsync(
         goto done;
     }
 
-    if (!ReportClientJsonProperty(jsonString, workflowData))
+    if (!ReportClientJsonProperty(ADUC_D2C_Message_Type_Device_Update_Result, jsonString, workflowData))
     {
         goto done;
     }

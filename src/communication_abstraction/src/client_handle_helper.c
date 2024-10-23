@@ -52,7 +52,7 @@ IOTHUB_MODULE_CLIENT_LL_HANDLE GetModuleClientHandle(ADUC_ClientHandle handle)
  * @param protocol the protocol to use to create the client connection
  * @returns true on success false on failure
  */
-_Bool ClientHandle_CreateFromConnectionString(
+bool ClientHandle_CreateFromConnectionString(
     ADUC_ClientHandle* iotHubClientHandle,
     ADUC_ConnType type,
     const char* connectionString,
@@ -258,6 +258,11 @@ IOTHUB_CLIENT_RESULT ClientHandle_SendEventAsync(
  */
 void ClientHandle_DoWork(ADUC_ClientHandle iotHubClientHandle)
 {
+    if (iotHubClientHandle == NULL)
+    {
+        return;
+    }
+
     if (g_ClientHandleType == ADUC_ConnType_Device)
     {
         IoTHubDeviceClient_LL_DoWork(GetDeviceClientHandle(iotHubClientHandle));
@@ -292,6 +297,39 @@ ClientHandle_SetOption(ADUC_ClientHandle iotHubClientHandle, const char* optionN
     else if (g_ClientHandleType == ADUC_ConnType_Module)
     {
         result = IoTHubModuleClient_LL_SetOption(GetModuleClientHandle(iotHubClientHandle), optionName, value);
+    }
+    else
+    {
+        Log_Error("ClientHandle_SetOption before called ClientHandle_CreateFromConnectionString");
+    }
+
+    return result;
+}
+
+/**
+ * @brief Wrapper for the device or model GetTwinAsync functions
+ * @details Uses either the device or module function depending on what the client type has been set to.
+ * @param iotHubClientHandle The clientHandle to be used for the operation
+ * @param deviceTwinCallback Callback for when the function completes
+ * @param userContextCallback A parameter to @p deviceTwinCallback
+ * @returns a value of IOTHUB_CLIENT_RESULT
+ */
+IOTHUB_CLIENT_RESULT
+ClientHandle_GetTwinAsync(
+    ADUC_ClientHandle iotHubClientHandle,
+    IOTHUB_CLIENT_DEVICE_TWIN_CALLBACK deviceTwinCallback,
+    void* userContextCallback)
+{
+    IOTHUB_CLIENT_RESULT result = IOTHUB_CLIENT_INVALID_ARG;
+    if (g_ClientHandleType == ADUC_ConnType_Device)
+    {
+        result = IoTHubDeviceClient_LL_GetTwinAsync(
+            GetDeviceClientHandle(iotHubClientHandle), deviceTwinCallback, userContextCallback);
+    }
+    else if (g_ClientHandleType == ADUC_ConnType_Module)
+    {
+        result = IoTHubModuleClient_LL_GetTwinAsync(
+            GetModuleClientHandle(iotHubClientHandle), deviceTwinCallback, userContextCallback);
     }
     else
     {
@@ -431,4 +469,6 @@ void ClientHandle_Destroy(ADUC_ClientHandle iotHubClientHandle)
     {
         Log_Error("ClientHandle_Destroy before called ClientHandle_CreateFromConnectionString");
     }
+
+    g_ClientHandleType = ADUC_ConnType_NotSet;
 }

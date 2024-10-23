@@ -8,11 +8,13 @@
 .gdbinit
 .gdb_history
 
-### etags, ctags, gtags (GNU global) and cscope
+### etags, ctags, gtags (GNU global), cscope, and cquery.
 TAGS
 .TAGS
 !TAGS/
 tags
+tags.lock
+tags.temp
 .tags
 !tags/
 gtags.files
@@ -20,12 +22,26 @@ GTAGS
 GRTAGS
 GPATH
 GSYMS
+.cquery
+compile_commands.json
 cscope.files
 cscope.out
 cscope.in.out
 cscope.po.out
 
+### openssl output
+*.sig
+*.pem
+
+### Python Module Files
+*__pycache__
+*__pycache__/*
+
 ### ADU build environment
 out/
 build/
 Testing/
+
+### VCPKG
+.vcpkg/
+.vcpkg-installed/
