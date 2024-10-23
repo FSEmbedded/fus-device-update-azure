@@ -572,6 +572,119 @@ done:
 }
 
 /**
+ * @brief Get the Connection Info from self-signed x509
+ *
+ * @return true if connection info can be obtained
+ */
+bool GetConnectionInfoFromConnectionx509Certificate(ADUC_ConnectionInfo* info, const char* connectionString)
+{
+    bool succeeded = false;
+    if (info == NULL)
+    {
+        goto done;
+    }
+    if (connectionString == NULL)
+    {
+        goto done;
+    }
+
+    memset(info, 0, sizeof(*info));
+
+    if (mallocAndStrcpy_s(&info->connectionString, connectionString) != 0)
+    {
+        goto done;
+    }
+
+    char fileContentString[1024*10] = {0};
+
+    ADUC_ConfigInfo config = {};
+    const bool allocated_configuration_info = ADUC_ConfigInfo_Init(&config, ADUC_CONF_FILE_PATH);
+
+    if ((allocated_configuration_info == true) &&
+        (config.agents[0].x509_container != NULL) &&
+        (strcmp(config.agents[0].x509_container, "") > 0) &&
+        (config.agents[0].x509_cert != NULL) &&
+        (strcmp(config.agents[0].x509_cert, "") > 0) &&
+        (config.agents[0].x509_key != NULL) &&
+        (strcmp(config.agents[0].x509_key, "") > 0) &&
+        (strcmp(config.agents[0].iotHubName, "") > 0) &&
+        (strcmp(config.agents[0].iotHubSuffix, "") > 0) &&
+        (strcmp(config.agents[0].device_id, "") > 0)
+    )
+    {
+        char x509_cert_path[PATH_MAX] = {0};
+        char x509_key_path[PATH_MAX] = {0};
+        int str_size = 0;
+
+        str_size = strlen(config.agents[0].x509_container);        
+
+        ADUC_Safe_StrCopyN(x509_cert_path, config.agents[0].x509_container, PATH_MAX - 1, str_size);
+        if (x509_cert_path[strlen(x509_cert_path)] != '/')
+        {
+            strncat(x509_cert_path, "/", PATH_MAX - strlen(x509_cert_path) - 1);
+        }
+        strncat(x509_cert_path, config.agents[0].x509_cert, PATH_MAX - strlen(x509_cert_path) - 1);
+
+        ADUC_Safe_StrCopyN(x509_key_path, config.agents[0].x509_container, PATH_MAX - 1, str_size);
+        if (x509_key_path[strlen(x509_key_path)] != '/')
+        {
+            strncat(x509_key_path, "/", PATH_MAX - strlen(x509_cert_path) - 1);
+        }
+        strncat(x509_key_path, config.agents[0].x509_key, PATH_MAX - strlen(x509_key_path) - 1);
+
+        if (!LoadBufferWithFileContents(x509_cert_path, fileContentString, ARRAY_SIZE(fileContentString)))
+        {
+            Log_Error("Failed to read the certificate from path: %s", x509_cert_path);
+            goto done;
+        }
+
+        if (mallocAndStrcpy_s(&info->x509certificate, fileContentString) != 0)
+        {
+            Log_Error("Failed to copy certificate string.");
+            goto done;
+        }
+
+        if (!LoadBufferWithFileContents(x509_key_path, fileContentString, ARRAY_SIZE(fileContentString)))
+        {
+            Log_Error("Failed to read the key from path: %s", x509_key_path);
+            goto done;
+        }
+
+        if (mallocAndStrcpy_s(&info->x509privatekey, fileContentString) != 0)
+        {
+            Log_Error("Failed to copy certificate string.");
+            goto done;
+        }
+
+        if((info->device_id = strdup(config.agents[0].device_id)) == NULL)
+        {
+            Log_Error("Could not allocate memory for \"device_id\"");
+            goto done;
+        }
+
+        if((info->iotHubName = strdup(config.agents[0].iotHubName)) == NULL)
+        {
+            Log_Error("Could not allocate memory for \"iotHubName\"");
+            goto done;
+        }
+
+        if((info->iotHubSuffix = strdup(config.agents[0].iotHubSuffix)) == NULL)
+        {
+            Log_Error("Could not allocate memory for \"iotHubSuffix\"");
+            goto done;
+        }
+
+        info->authType = ADUC_AuthType_X509;
+        info->connType = ADUC_ConnType_Device;
+    }
+    succeeded = true;
+
+done:
+    ADUC_ConfigInfo_UnInit(&config);
+    return succeeded;
+}
+
+/**
  * @brief Gets the agent configuration information and loads it according to the provisioning scenario
  *
  * @param info the connection information that will be configured
@@ -610,6 +723,14 @@ bool GetAgentConfigInfo(ADUC_ConnectionInfo* info)
     else if (strcmp(agent->connectionType, "string") == 0)
     {
         if (!GetConnectionInfoFromConnectionString(info, agent->connectionData))
+        {
+            goto done;
+        }
+    }
+    else if (strcmp(agent->connectionType, "x509") == 0)
+    {
+        Log_Info("Use x509 certificate");
+        if (!GetConnectionInfoFromConnectionx509Certificate(info, agent->connectionData))
         {
             goto done;
         }

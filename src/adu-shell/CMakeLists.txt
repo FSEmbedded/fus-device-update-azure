@@ -36,7 +36,7 @@ string (
             ${ADUC_STEP_HANDLERS})
 
 # Support all microsoft/* update types by default.
-set (source_files ${agent_c_files} ${agent_apt_c_files} ${agent_script_c_files} ${agent_fus_firmware_c_files} ${agent_fus_application_c_files} ${agent_fus_update_c_files)
+set (source_files ${agent_c_files} ${agent_apt_c_files} ${agent_script_c_files} ${agent_fus_firmware_c_files} ${agent_fus_application_c_files} ${agent_fus_update_c_files})
 
 set (adushell_def ADUSHELL_SWUPDATE="yes" ADUSHELL_APT="yes" ADUSHELL_SCRIPT="yes" ADUSHELL_FUS_FIRMWARE="yes" ADUSHELL_FUS_APPLICATION="yes" ADUSHELL_FUS_UPDATE="yes")
 
@@ -68,7 +68,8 @@ target_link_libraries (
             aduc::c_utils
             aduc::config_utils
             aduc::process_utils
-            aduc::string_utils)
+            aduc::string_utils
+            aduc::system_utils)
 
 add_subdirectory (scripts)
 

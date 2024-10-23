@@ -70,7 +70,7 @@ _Bool GetConnectionInfoFromConnectionString(ADUC_ConnectionInfo* info, const cha
  *
  * @return true if connection info can be obtained
  */
-_Bool GetConnectionInfoFromConnectionx509Certificate(ADUC_ConnectionInfo* info);
+bool GetConnectionInfoFromConnectionx509Certificate(ADUC_ConnectionInfo* info, const char* connectionString);
 
 /**
  * @brief Checks whether we can obtain a device or module connection string.

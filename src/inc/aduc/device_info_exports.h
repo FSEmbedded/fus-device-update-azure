@@ -26,7 +26,7 @@ typedef enum tagDI_DeviceInfoProperty
     DIIP_TotalMemory,
     DIIP_TotalStorage,
     DIIP_FirmwareVersion,
-    DIIP_ApplicationVersion
+    DIIP_ApplicationVersion,
 } DI_DeviceInfoProperty;
 
 //
