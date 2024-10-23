@@ -64,7 +64,7 @@ static char* DeviceInfo_GetManufacturer()
     char* result = nullptr;
 
     ADUC_ConfigInfo config = {};
-    if (ADUC_ConfigInfo_Init(&config, ADUC_CONF_FILE_PATH) && config.manufacturer != nullptr)
+    if (ADUC_ConfigInfo_Init(&config, ADUC_CONF_FOLDER) && config.manufacturer != nullptr)
     {
         result = strdup(config.manufacturer);
     }
@@ -97,7 +97,7 @@ static char* DeviceInfo_GetModel()
 
     char* result = nullptr;
     ADUC_ConfigInfo config = {};
-    if (ADUC_ConfigInfo_Init(&config, ADUC_CONF_FILE_PATH) && config.model != nullptr)
+    if (ADUC_ConfigInfo_Init(&config, ADUC_CONF_FOLDER) && config.model != nullptr)
     {
         result = strdup(config.model);
     }

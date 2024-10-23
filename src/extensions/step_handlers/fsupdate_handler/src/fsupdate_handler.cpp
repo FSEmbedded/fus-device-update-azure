@@ -4,7 +4,7 @@
  *
  * Will call into wrapper script for fsupdate to install image files.
  *
- * fus/fsupdate
+ * fus/update
  * v1:
  *   Description:
  *   Initial revision.
@@ -16,10 +16,13 @@
  * Licensed under the MIT License.
  */
 #include "aduc/fsupdate_handler.hpp"
+#include "aduc/fsupdate_result.h" /* fsupdate result codes */
 
 #include "aduc/adu_core_exports.h"
+#include "aduc/config_utils.h"
 #include "aduc/extension_manager.hpp"
 #include "aduc/logging.h"
+#include "aduc/parser_utils.h" // ADUC_FileEntity_Uninit
 #include "aduc/process_utils.hpp"
 #include "aduc/string_c_utils.h"
 #include "aduc/string_utils.hpp"
@@ -57,13 +60,20 @@
 namespace adushconst = Adu::Shell::Const;
 
 EXTERN_C_BEGIN
+
+// BEGIN Shared Library Export Functions
+//
+// These are the function symbols that the device update agent will
+// lookup and call.
+//
+
 /**
  * @brief Instantiates an Update Content Handler for 'fus/update:1' update type.
  */
-ContentHandler* CreateUpdateContentHandlerExtension(ADUC_LOG_SEVERITY logLevel)
+EXPORTED_METHOD ContentHandler* CreateUpdateContentHandlerExtension(ADUC_LOG_SEVERITY logLevel)
 {
     ADUC_Logging_Init(logLevel, "fsupdate-handler");
-    Log_Info("Instantiating an Update Content Handler for 'fus/update:1'");
+    Log_Info("Instantiating a Step Handler for 'fus/update:1'");
     try
     {
         return FSUpdateHandlerImpl::CreateContentHandler();
@@ -80,6 +90,24 @@ ContentHandler* CreateUpdateContentHandlerExtension(ADUC_LOG_SEVERITY logLevel)
 
     return nullptr;
 }
+
+/**
+ * @brief Gets the extension contract info.
+ *
+ * @param[out] contractInfo The extension contract info.
+ * @return ADUC_Result The result.
+ */
+EXPORTED_METHOD ADUC_Result GetContractInfo(ADUC_ExtensionContractInfo* contractInfo)
+{
+    contractInfo->majorVer = ADUC_V1_CONTRACT_MAJOR_VER;
+    contractInfo->minorVer = ADUC_V1_CONTRACT_MINOR_VER;
+    return ADUC_Result{ ADUC_GeneralResult_Success, 0 };
+}
+
+//
+// END Shared Library Export Functions
+/////////////////////////////////////////////////////////////////////////////
+
 EXTERN_C_END
 
 FSUpdateHandlerImpl::FSUpdateHandlerImpl() :
@@ -177,7 +205,7 @@ bool FSUpdateHandlerImpl::create_work_dir()
 static ADUC_Result HandleFSUpdateRebootState()
 {
     ADUC_Result result = { ADUC_Result_Failure };
-    std::string command = adushconst::adu_shell;
+    std::string command = ADUSHELL_FILE_PATH;
     std::vector<std::string> args{ adushconst::update_type_opt,
                                    adushconst::update_type_fus_update,
                                    adushconst::update_action_opt,
@@ -198,7 +226,7 @@ static ADUC_Result CommitUpdateState(const char* update_type)
     ADUC_Result result = { ADUC_Result_Failure };
     Log_Info("Applying update.");
 
-    std::string command = adushconst::adu_shell;
+    std::string command = ADUSHELL_FILE_PATH;
     std::vector<std::string> args{ adushconst::update_type_opt,
                                    update_type,
                                    adushconst::update_action_opt,
@@ -220,31 +248,13 @@ ADUC_Result FSUpdateHandlerImpl::Download(const tagADUC_WorkflowData* workflowDa
 {
     std::stringstream updateFilename;
     ADUC_Result result = { ADUC_Result_Failure };
-    ADUC_FileEntity* entity = nullptr;
+    ADUC_FileEntity fileEntity;
     ADUC_WorkflowHandle workflowHandle = workflowData->WorkflowHandle;
     char* workflowId = workflow_get_id(workflowHandle);
     char* workFolder = workflow_get_workfolder(workflowHandle);
     int fileCount = 0;
 
-    char* updateType = workflow_get_update_type(workflowHandle);
-    char* updateName = nullptr;
-    unsigned int updateTypeVersion = 0;
-    bool updateTypeOk = ADUC_ParseUpdateType(updateType, &updateName, &updateTypeVersion);
-
-    if (!updateTypeOk)
-    {
-        Log_Error("FSUpdate packages download failed. Unknown Handler Version (UpdateDateType:%s)", updateType);
-        result.ExtendedResultCode = ADUC_ERC_FSUPDATE_HANDLER_DOWNLOAD_FAILURE_UNKNOW_UPDATE_VERSION;
-        goto done;
-    }
-
-    if (updateTypeVersion != 1)
-    {
-        Log_Error("FSUpdate packages download failed. Wrong Handler Version %d", updateTypeVersion);
-        result.ExtendedResultCode = ADUC_ERC_FSUPDATE_HANDLER_DOWNLOAD_FAILURE_WRONG_UPDATE_VERSION;
-        goto done;
-    }
-
+    memset(&fileEntity, 0, sizeof(fileEntity));
     // For 'fus/update:1', we're expecting 1 payload file.
     fileCount = workflow_get_update_files_count(workflowHandle);
     if (fileCount != 1)
@@ -254,13 +264,13 @@ ADUC_Result FSUpdateHandlerImpl::Download(const tagADUC_WorkflowData* workflowDa
         goto done;
     }
 
-    if (!workflow_get_update_file(workflowHandle, 0, &entity))
+    if (!workflow_get_update_file(workflowHandle, 0, &fileEntity))
     {
         result.ExtendedResultCode = ADUC_ERC_FSUPDATE_HANDLER_DOWNLOAD_BAD_FILE_ENTITY;
         goto done;
     }
 
-    updateFilename << workFolder << "/" << entity->TargetFilename;
+    updateFilename << workFolder << "/" << fileEntity.TargetFilename;
     {
         char* installedCriteria = ADUC_WorkflowData_GetInstalledCriteria(workflowData);
         const char* updateType = this->update_type_names[this->update_type];
@@ -347,16 +357,14 @@ ADUC_Result FSUpdateHandlerImpl::Download(const tagADUC_WorkflowData* workflowDa
 
     Log_Info("Start download update file: '%s'", updateFilename.str().c_str());
 
-    result = ExtensionManager::Download(entity, workflowId, workFolder, DO_RETRY_TIMEOUT_DEFAULT, nullptr);
+    result = ExtensionManager::Download(
+                &fileEntity, workflowHandle, &Default_ExtensionManager_Download_Options, nullptr);
 
     Log_Info("Download result code: '%d' and extended result code '%d'", result.ResultCode, result.ExtendedResultCode);
 
 done:
     workflow_free_string(workflowId);
     workflow_free_string(workFolder);
-    workflow_free_string(updateType);
-    workflow_free_file_entity(entity);
-    free(updateName);
 
     return result;
 }
@@ -370,10 +378,11 @@ done:
 ADUC_Result FSUpdateHandlerImpl::Install(const tagADUC_WorkflowData* workflowData)
 {
     ADUC_Result result = { ADUC_Result_Failure };
-    ADUC_FileEntity* entity = nullptr;
+    ADUC_FileEntity fileEntity;
     ADUC_WorkflowHandle workflowHandle = workflowData->WorkflowHandle;
     char* workFolder = workflow_get_workfolder(workflowHandle);
     update_type_t up_type = UPDATE_UNKNOWN;
+    memset(&fileEntity, 0, sizeof(fileEntity));
 
     Log_Info("Installing from %s", workFolder);
     std::unique_ptr<DIR, std::function<int(DIR*)>> directory(
@@ -387,7 +396,7 @@ ADUC_Result FSUpdateHandlerImpl::Install(const tagADUC_WorkflowData* workflowDat
         goto done;
     }
 
-    if (!workflow_get_update_file(workflowHandle, 0, &entity))
+    if (!workflow_get_update_file(workflowHandle, 0, &fileEntity))
     {
         result.ExtendedResultCode = ADUC_ERC_FSUPDATE_HANDLER_INSTALL_FAILURE_BAD_FILE_ENTITY;
         goto done;
@@ -410,7 +419,7 @@ ADUC_Result FSUpdateHandlerImpl::Install(const tagADUC_WorkflowData* workflowDat
             Log_Debug("Waiting for install command");
         }
 
-        std::string command = adushconst::adu_shell;
+        std::string command = ADUSHELL_FILE_PATH;
         std::vector<std::string> args{ adushconst::update_type_opt,
                                        adushconst::update_type_fus_update,
                                        adushconst::update_action_opt,
@@ -418,7 +427,7 @@ ADUC_Result FSUpdateHandlerImpl::Install(const tagADUC_WorkflowData* workflowDat
                                        adushconst::target_data_opt};
 
         std::stringstream data;
-        data << workFolder << "/" << entity->TargetFilename;
+        data << workFolder << "/" << fileEntity.TargetFilename;
         args.emplace_back(data.str().c_str());
 
         std::string update_type_name = type_name;
@@ -474,7 +483,6 @@ ADUC_Result FSUpdateHandlerImpl::Install(const tagADUC_WorkflowData* workflowDat
 
 done:
     workflow_free_string(workFolder);
-    workflow_free_file_entity(entity);
 
     return result;
 }
@@ -552,7 +560,7 @@ ADUC_Result FSUpdateHandlerImpl::Cancel(const tagADUC_WorkflowData* workflowData
     {
         Log_Info("Incomplete application update -> proceed rollback");
 
-        std::string command = adushconst::adu_shell;
+        std::string command = ADUSHELL_FILE_PATH;
         std::vector<std::string> args{ adushconst::update_type_opt,
                                     adushconst::update_type_fus_update,
                                     adushconst::update_action_opt,
@@ -859,5 +867,34 @@ ADUC_Result FSUpdateHandlerImpl::IsInstalled(const tagADUC_WorkflowData* workflo
 
 done:
     workflow_free_string(installedCriteria);
+    return result;
+}
+
+/**
+ * @brief Backup implementation for fsupdate.
+ *
+ * @return ADUC_Result The result of the backup.
+ * It will always return ADUC_Result_Backup_Success.
+ */
+ADUC_Result FSUpdateHandlerImpl::Backup(const tagADUC_WorkflowData* workflowData)
+{
+    ADUC_Result result = { ADUC_Result_Backup_Success };
+    Log_Info("FSUpdate doesn't require a specific operation to backup. (no-op) ");
+    return result;
+}
+
+
+/**
+ * @brief Restore implementation for fsupdate.
+ *
+ * @return ADUC_Result The result of the restore.
+ * ADUC_Result_Restore_Success - success
+ * ADUC_Result_Restore_Success_Unsupported - no-op
+ */
+ADUC_Result FSUpdateHandlerImpl::Restore(const tagADUC_WorkflowData* workflowData)
+{
+    ADUC_Result result = { ADUC_Result_Restore_Success_Unsupported };
+    UNREFERENCED_PARAMETER(workflowData);
+    Log_Info("FSUpdate update backup & restore is not supported. (no-op)");
     return result;
 }

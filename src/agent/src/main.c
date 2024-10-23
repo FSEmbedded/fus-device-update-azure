@@ -741,10 +741,12 @@ bool StartupAgent(const ADUC_LaunchArguments* launchArgs)
             goto done;
         }
 
-        if (!ADUC_SetDiagnosticsDeviceNameFromConnectionString(info.connectionString))
-        {
-            Log_Error("Setting DiagnosticsDeviceName failed");
-            goto done;
+        if(info.authType != ADUC_AuthType_X509) {
+            if (!ADUC_SetDiagnosticsDeviceNameFromConnectionString(info.connectionString))
+            {
+                Log_Error("Setting DiagnosticsDeviceName failed");
+                goto done;
+            }
         }
 
         if (!IoTHub_CommunicationManager_Init(

@@ -196,5 +196,23 @@ MOCKABLE_FUNCTION(
  */
 MOCKABLE_FUNCTION(, void, ClientHandle_Destroy, ADUC_ClientHandle, iotHubClientHandle)
 
+/**
+ * @brief Wrapper function for the Device and Module Create functions
+ * @details Uses either the device or module function depending on what the client type has been set to.
+ * @param iotHubClientHandle the clientHandle to be set by the createFromConnectionString function
+ * @param iotHubName The IoT Hub name to which the device is connecting.
+ * @param deviceID device Id of the device
+ * @param iotHubSuffix IoT Hub suffix goes here, e.g., private.azure-devices-int.net.
+ * @param protocol the protocol to use to create the client connection
+ * @returns true on success false on failure
+ */
+bool ClientHandle_Create(
+    ADUC_ClientHandle* iotHubClientHandle,
+    ADUC_ConnType type,
+    const char* iotHubName,
+    const char* deviceID,
+    const char* iotHubSuffix,
+    IOTHUB_CLIENT_TRANSPORT_PROVIDER protocol);
+
 EXTERN_C_END
 #endif // CLIENT_HANDLE_HELPER_H

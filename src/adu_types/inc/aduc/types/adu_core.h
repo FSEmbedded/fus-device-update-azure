@@ -255,9 +255,11 @@ typedef enum tagADUC_ResultCode
 
     ADUC_Result_Cancel_Success = 800,            /**< Succeeded. */
     ADUC_Result_Cancel_UnableToCancel = 801,     /**< Not a failure. Cancel is best effort. */
+    ADUC_Result_Cancel_RequiredImmediateReboot = 802,     /**< Need reboot */
 
     ADUC_Result_IsInstalled_Installed = 900,     /**< Succeeded and content is installed. */
     ADUC_Result_IsInstalled_NotInstalled = 901,  /**< Succeeded and content is not installed */
+    ADUC_Result_IsInstalled_MissingCommit = 902, /**< Commit required. */
 
     ADUC_Result_Backup_Success = 1000,                       /**< Succeeded. */
     ADUC_Result_Backup_Success_Unsupported = 1001,           /**< Succeeded to proceed with the workflow, but the action is not implemented/supported in the step handler. */

@@ -320,14 +320,46 @@ static bool ADUC_DeviceClient_Create(
         result = false;
     }
     // Create a connection to IoTHub.
-    else if (!ClientHandle_CreateFromConnectionString(
+    else if (connInfo->authType == ADUC_AuthType_SASToken && !ClientHandle_CreateFromConnectionString(
                  outClientHandle, connInfo->connType, connInfo->connectionString, transportProvider))
     {
         Log_Error("Failure creating IotHub device client using MQTT protocol. Check your connection string.");
         result = false;
     }
+    else if (connInfo->authType == ADUC_AuthType_X509)
+    {
+        if (!ClientHandle_Create(outClientHandle, ADUC_ConnType_Device, connInfo->iotHubName, connInfo->device_id, connInfo->iotHubSuffix, MQTT_Protocol))
+        {
+            Log_Error("Could not create instance on certificate");
+            result = false;
+        }
+        else
+        {
+            Log_Info("Succesfull create instance of an handle");
+        }
+
+        if ((iothubResult = ClientHandle_SetOption(*outClientHandle, OPTION_X509_CERT, connInfo->x509certificate) != IOTHUB_CLIENT_OK))
+        {
+            Log_Error("Unable to set certificate string for validation");
+            result = false;
+        }
+        else
+        {
+            Log_Info("Succesfull set certificate");
+        }
+
+        if ((iothubResult = ClientHandle_SetOption(*outClientHandle, OPTION_X509_PRIVATE_KEY, connInfo->x509privatekey) != IOTHUB_CLIENT_OK))
+        {
+            Log_Error("Unable to set private key string for validation");
+            result = false;
+        }
+        else
+        {
+            Log_Info("Succesfull set key");
+        }
+    }
     // Sets IoTHub tracing verbosity level.
-    else if (
+    if (
         (iothubResult = ClientHandle_SetOption(*outClientHandle, OPTION_LOG_TRACE, &iotHubTracingEnabled))
         != IOTHUB_CLIENT_OK)
     {
@@ -598,7 +630,7 @@ bool GetConnectionInfoFromConnectionx509Certificate(ADUC_ConnectionInfo* info, c
     char fileContentString[1024*10] = {0};
 
     ADUC_ConfigInfo config = {};
-    const bool allocated_configuration_info = ADUC_ConfigInfo_Init(&config, ADUC_CONF_FILE_PATH);
+    const bool allocated_configuration_info = ADUC_ConfigInfo_Init(&config, ADUC_CONF_FOLDER);
 
     if ((allocated_configuration_info == true) &&
         (config.agents[0].x509_container != NULL) &&
@@ -614,7 +646,7 @@ bool GetConnectionInfoFromConnectionx509Certificate(ADUC_ConnectionInfo* info, c
     {
         char x509_cert_path[PATH_MAX] = {0};
         char x509_key_path[PATH_MAX] = {0};
-        int str_size = 0;
+        size_t str_size = 0;
 
         str_size = strlen(config.agents[0].x509_container);        
 

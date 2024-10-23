@@ -10,7 +10,6 @@
 
 #include "aduc/content_handler.hpp"
 #include "aduc/logging.h"
-#include <aduc/result.h>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -30,7 +29,15 @@ EXTERN_C_BEGIN
  * @brief Instantiates an Update Content Handler for 'fus/update:1' update type.
  * @return A pointer to an instantiated Update Content Handler object.
  */
-ContentHandler* CreateUpdateContentHandlerExtension(ADUC_LOG_SEVERITY logLevel);
+EXPORTED_METHOD ContentHandler* CreateUpdateContentHandlerExtension(ADUC_LOG_SEVERITY logLevel);
+
+/**
+ * @brief Gets the extension contract info.
+ *
+ * @param[out] contractInfo The extension contract info.
+ * @return ADUC_Result The result.
+ */
+EXPORTED_METHOD ADUC_Result GetContractInfo(ADUC_ExtensionContractInfo* contractInfo);
 
 EXTERN_C_END
 
@@ -60,9 +67,11 @@ public:
     ~FSUpdateHandlerImpl() override;
 
     ADUC_Result Download(const tagADUC_WorkflowData* workflowData) override;
+    ADUC_Result Backup(const tagADUC_WorkflowData* workflowData) override;
     ADUC_Result Install(const tagADUC_WorkflowData* workflowData) override;
     ADUC_Result Apply(const tagADUC_WorkflowData* workflowData) override;
     ADUC_Result Cancel(const tagADUC_WorkflowData* workflowData) override;
+    ADUC_Result Restore(const tagADUC_WorkflowData* workflowData) override;
     ADUC_Result IsInstalled(const tagADUC_WorkflowData* workflowData) override;
 
     update_type_t getUpdateType();

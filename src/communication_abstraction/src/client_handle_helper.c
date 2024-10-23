@@ -107,6 +107,78 @@ done:
 }
 
 /**
+ * @brief Wrapper function for the Device and Module Create functions
+ * @details Uses either the device or module function depending on what the client type has been set to.
+ * @param iotHubClientHandle the clientHandle to be set by the createFromConnectionString function
+ * @param iotHubName The IoT Hub name to which the device is connecting.
+ * @param deviceID device Id of the device
+ * @param iotHubSuffix IoT Hub suffix goes here, e.g., private.azure-devices-int.net.
+ * @param protocol the protocol to use to create the client connection
+ * @returns true on success false on failure
+ */
+bool ClientHandle_Create(
+    ADUC_ClientHandle* iotHubClientHandle,
+    ADUC_ConnType type,
+    const char* iotHubName,
+    const char* deviceID,
+    const char* iotHubSuffix,
+    IOTHUB_CLIENT_TRANSPORT_PROVIDER protocol)
+{
+    if (g_ClientHandleType != ADUC_ConnType_NotSet)
+    {
+        Log_Error(
+            "ClientHandle_Create called for a second time. Only supports a single connection per agent");
+        return false;
+    }
+
+    if ((iotHubClientHandle == NULL) || (iotHubName == NULL) || (deviceID == NULL) || (iotHubSuffix == NULL))
+    {
+        Log_Error("ClientHandle_Create called with NULL parameters");
+        return false;
+    }
+
+    if (type == ADUC_ConnType_Device)
+    {
+        IOTHUB_CLIENT_CONFIG config;
+        config.protocol = protocol;
+        config.deviceId = deviceID;
+        config.deviceKey = NULL;
+        config.deviceSasToken = NULL;
+        config.iotHubName = iotHubName;
+        config.iotHubSuffix = iotHubSuffix;
+        config.protocolGatewayHostName = NULL;
+
+        IOTHUB_DEVICE_CLIENT_LL_HANDLE deviceHandle =
+            IoTHubDeviceClient_LL_Create(&config);
+
+        *iotHubClientHandle = (ADUC_ClientHandle)deviceHandle;
+        goto done;
+    }
+    else if (type == ADUC_ConnType_Module)
+    {
+        *iotHubClientHandle = NULL;
+        Log_Error("Invalid call of ClientHandle_Create: Not defined for \"ADUC_ConnType_Module\"");
+    }
+    else
+    {
+        *iotHubClientHandle = NULL;
+        Log_Error("Invalid call of ClientHandle_Create without a valid ADUC_ConnType");
+        goto done;
+    }
+
+done:
+
+    if (*iotHubClientHandle == NULL)
+    {
+        Log_Error("Call to ClientHandle_Create returned NULL");
+        return false;
+    }
+
+    g_ClientHandleType = type;
+    return true;
+}
+
+/**
  * @brief Wrapper function for the Device and Module SetConnectionStatusCallback function
  * @details Uses either the device or module function depending on what the client type has been set to.
  * @param iotHubClientHandle the clientHandle to be used for the operation
